@@ -1,0 +1,22 @@
+# Unreal Engine Core
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Ignore Content for now
+Content/
+
+# Ignore Plugins (optional for now)
+Plugins/
+
+# IDE
+.vs/
+*.sln
+*.VC.db
+
+# Logs
+*.log
+
+# OS
+.DS_Store

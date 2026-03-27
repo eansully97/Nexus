@@ -5,16 +5,14 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/CapsuleComponent.h"
-#include "Enemy/Minions/NexusMinionBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/GameMode/NexusGameMode.h"
+#include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
-#include "Nexus/HUD/NexusHUD.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
-#include "Nexus/Weapons/NexusWeaponBase.h"
 
 ANexusCharacterBase::ANexusCharacterBase()
 {
@@ -66,21 +64,41 @@ void ANexusCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANexusCharacterBase, bIsDead);
+	DOREPLIFETIME(ANexusCharacterBase, TeamID);
 }
 
 void ANexusCharacterBase::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
+	SetOwner(NewController);
 	SyncTeamFromPlayerState();
 
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
-		if (StartingAbilities.Num() > 0)
-		{
-			GrantAbilities(StartingAbilities);
-		}
+		AbilitySystemComponent->RefreshAbilityActorInfo();
+	}
+
+	if (HasAuthority() && StartingAbilities.Num() > 0 && StartupAbilitySpecHandles.Num() == 0)
+	{
+		GrantAbilities(StartingAbilities, true, false);
+	}
+}
+
+void ANexusCharacterBase::OnRep_Controller()
+{
+	Super::OnRep_Controller();
+
+	if (Controller)
+	{
+		SetOwner(Controller);
+	}
+
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		AbilitySystemComponent->RefreshAbilityActorInfo();
 	}
 }
 
@@ -187,15 +205,27 @@ void ANexusCharacterBase::OnDeathStarted()
 	{
 		PlayAnimMontage(DeathMontage);
 	}
+
+	BP_OnDeathStarted();
+
+	FGameplayTagContainer Container;
+	Container.AddTag(FGameplayTag::RequestGameplayTag(FName("Status.Dead")));
+
+	UAbilitySystemBlueprintLibrary::AddGameplayTags(this, Container, EGameplayTagReplicationState::TagOnly);
+
 	GetCapsuleComponent()->SetCollisionObjectType(ECC_WorldStatic);
 	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Ignore);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	
+
 	GetMesh()->SetCollisionObjectType(ECC_WorldStatic);
 	GetMesh()->SetCollisionResponseToAllChannels(ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	
-	RemoveAbilities(GrantedAbilitySpecHandles);
+
+	if (HasAuthority())
+	{
+		RemoveTemporaryAbilities();
+	}
+
 	if (IsLocallyControlled())
 	{
 		if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -203,6 +233,7 @@ void ANexusCharacterBase::OnDeathStarted()
 			DisableInput(PC);
 		}
 	}
+
 	if (HasAuthority())
 	{
 		if (GetController() && GetController()->IsPlayerController())
@@ -238,44 +269,134 @@ UAbilitySystemComponent* ANexusCharacterBase::GetAbilitySystemComponent() const
 }
 
 TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilities(
-	TArray<TSubclassOf<UGameplayAbility>> AbilitiesToGrant)
+	const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant,
+	bool bTrackAsStartupAbilities,
+	bool bTrackAsTemporaryAbilities)
 {
+	TArray<FGameplayAbilitySpecHandle> NewlyGrantedHandles;
+
 	if (!AbilitySystemComponent || !HasAuthority())
 	{
-		return TArray<FGameplayAbilitySpecHandle>();
+		return NewlyGrantedHandles;
 	}
 
-	for (const TSubclassOf<UGameplayAbility> Ability : AbilitiesToGrant)
+	for (const TSubclassOf<UNexusGameplayAbility>& AbilityClass : AbilitiesToGrant)
 	{
-		FGameplayAbilitySpecHandle SpecHandle = AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability, 1, -1, this));
-		GrantedAbilitySpecHandles.Add(SpecHandle);
+		if (!AbilityClass)
+		{
+			continue;
+		}
+		
+		FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this);
+		const FGameplayAbilitySpecHandle SpecHandle = AbilitySystemComponent->GiveAbility(AbilitySpec);
+		
+		
+		if (SpecHandle.IsValid())
+		{
+			NewlyGrantedHandles.Add(SpecHandle);
+
+			if (bTrackAsStartupAbilities)
+			{
+				StartupAbilitySpecHandles.Add(SpecHandle);
+			}
+
+			if (bTrackAsTemporaryAbilities)
+			{
+				TemporaryAbilitySpecHandles.Add(SpecHandle);
+			}
+		}
 	}
-	SendAbilitiesChangedEvent();
-	return GrantedAbilitySpecHandles;
+	if (NewlyGrantedHandles.Num() > 0)
+	{
+		if (AbilitySystemComponent)
+		{
+			AbilitySystemComponent->ForceReplication();
+		}
+
+		ForceNetUpdate();
+
+		BroadcastAbilitiesChanged();
+		Client_NotifyAbilitiesChanged();
+	}
+
+	return NewlyGrantedHandles;
 }
 
-void ANexusCharacterBase::RemoveAbilities(TArray<FGameplayAbilitySpecHandle> SpecHandles)
+void ANexusCharacterBase::BroadcastAbilitiesChangedDeferred()
+{
+	BroadcastAbilitiesChanged();
+}
+
+void ANexusCharacterBase::RemoveAbilities(const TArray<FGameplayAbilitySpecHandle>& SpecHandles)
 {
 	if (!AbilitySystemComponent || !HasAuthority())
 	{
 		return;
 	}
 
-	for (FGameplayAbilitySpecHandle SpecHandle : SpecHandles)
+	bool bRemovedAtLeastOne = false;
+
+	for (const FGameplayAbilitySpecHandle& SpecHandle : SpecHandles)
 	{
+		if (!SpecHandle.IsValid())
+		{
+			continue;
+		}
+
 		AbilitySystemComponent->ClearAbility(SpecHandle);
+
+		StartupAbilitySpecHandles.Remove(SpecHandle);
+		TemporaryAbilitySpecHandles.Remove(SpecHandle);
+
+		bRemovedAtLeastOne = true;
 	}
-	SendAbilitiesChangedEvent();
+
+	if (bRemovedAtLeastOne)
+	{
+		if (AbilitySystemComponent)
+		{
+			AbilitySystemComponent->ForceReplication();
+		}
+
+		ForceNetUpdate();
+
+		BroadcastAbilitiesChanged();
+		Client_NotifyAbilitiesChanged();
+	}
 }
 
-void ANexusCharacterBase::SendAbilitiesChangedEvent()
+void ANexusCharacterBase::RemoveStartupAbilities()
 {
-	FGameplayEventData EventData;
-	EventData.EventTag = FGameplayTag::RequestGameplayTag(FName("Event.Abilities.Changed"));
-	EventData.Instigator = this;
-	EventData.Target = this;
+	RemoveAbilities(StartupAbilitySpecHandles);
+	StartupAbilitySpecHandles.Empty();
+}
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, EventData.EventTag, EventData);
+void ANexusCharacterBase::RemoveTemporaryAbilities()
+{
+	RemoveAbilities(TemporaryAbilitySpecHandles);
+	TemporaryAbilitySpecHandles.Empty();
+}
+
+void ANexusCharacterBase::BroadcastAbilitiesChanged()
+{
+	OnAbilitiesChanged.Broadcast();
+}
+
+void ANexusCharacterBase::Client_NotifyAbilitiesChanged_Implementation()
+{
+	BroadcastAbilitiesChanged();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DeferredAbilitiesChangedHandle);
+		World->GetTimerManager().SetTimer(
+			DeferredAbilitiesChangedHandle,
+			this,
+			&ANexusCharacterBase::BroadcastAbilitiesChangedDeferred,
+			0.05f,
+			false
+		);
+	}
 }
 
 void ANexusCharacterBase::SetCharacterSpeedToZero()
@@ -299,3 +420,11 @@ void ANexusCharacterBase::RestoreCharacterMovement()
 	GetCharacterMovement()->MaxAcceleration = CachedAcceleration;
 }
 
+ANexusCapturePoint* ANexusCharacterBase::GetCurrentCapturePoint()
+{
+	if (bAtCapturePoint)
+	{
+		return CurrentCapturePoint;
+	}
+	return nullptr;
+}

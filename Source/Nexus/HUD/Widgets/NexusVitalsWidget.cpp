@@ -10,8 +10,7 @@
 void UNexusVitalsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-
-	// Optional initial bind for first spawn.
+	
 	if (APawn* OwningPawn = GetOwningPlayerPawn())
 	{
 		SetObservedPawn(OwningPawn);

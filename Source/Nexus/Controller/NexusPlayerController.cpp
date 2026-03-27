@@ -33,6 +33,12 @@ void ANexusPlayerController::OnRep_Pawn()
 	RefreshHUDBindings();
 }
 
+void ANexusPlayerController::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	GetCrosshairHitResult(CurrentCrosshairHit, 10000.f);
+}
+
 void ANexusPlayerController::RefreshHUDBindings()
 {
 	if (!IsLocalController())
@@ -53,4 +59,45 @@ void ANexusPlayerController::RefreshHUDBindings()
 	}
 
 	MainWidget->SetObservedPawn(GetPawn());
+}
+
+bool ANexusPlayerController::GetCrosshairHitResult(FHitResult& OutHit, float TraceDistance) const
+{
+	OutHit = FHitResult();
+
+	int32 ViewportX = 0;
+	int32 ViewportY = 0;
+	GetViewportSize(ViewportX, ViewportY);
+
+	const FVector2D ScreenCenter(
+		ViewportX * 0.5f,
+		ViewportY * 0.5f
+	);
+
+	FVector WorldLocation;
+	FVector WorldDirection;
+
+	if (!DeprojectScreenPositionToWorld(
+		ScreenCenter.X,
+		ScreenCenter.Y,
+		WorldLocation,
+		WorldDirection))
+	{
+		return false;
+	}
+
+	const FVector TraceStart = WorldLocation;
+	const FVector TraceEnd = TraceStart + (WorldDirection * TraceDistance);
+
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = true;
+	Params.AddIgnoredActor(GetPawn());
+
+	return GetWorld()->LineTraceSingleByChannel(
+		OutHit,
+		TraceStart,
+		TraceEnd,
+		ECC_Visibility,
+		Params
+	);
 }

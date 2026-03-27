@@ -20,7 +20,10 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void HandleReachedCapturePoint(ANexusCapturePoint* CapturePoint);
-	
+
+	void SetAtCapturePoint(bool NewValue);
+	void HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnRep_TeamID() override;
@@ -29,14 +32,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Objective")
 	TObjectPtr<ANexusCapturePoint> TargetCapturePoint = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Objective")
-	bool bAtCapturePoint = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float AggroRange = 250.f;
+	float AggroRange = 200.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float LoseTargetRange = 300.f;
+	float LoseTargetRange = 250.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI")
 	AActor* CurrentTarget = nullptr;
@@ -51,9 +52,8 @@ protected:
 	
 
 public:
-	AActor* FindTargetInFront();
+	ANexusCharacterBase* FindTargetInFront();
 	bool IsTargetStillValid(AActor* Actor) const;
 	void UpdateTargetActor();
-	UFUNCTION(BlueprintCallable)
-	ANexusCapturePoint* GetCurrentCapturePoint();
+
 };

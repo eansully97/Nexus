@@ -3,9 +3,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Nexus/NexusTeamTypes.h"
+#include "Nexus/NexusEnumTypes.h"
 #include "CapturePoint.generated.h"
 
+class ANexusCharacterBase;
 class USphereComponent;
 class ANexusMinionBase;
 
@@ -21,13 +22,16 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	UFUNCTION(BlueprintCallable)
-	void RegisterMinion(ANexusMinionBase* Minion);
+	void RegisterCombatUnit(ANexusCharacterBase* Unit);
 
 	UFUNCTION(BlueprintCallable)
-	void UnregisterMinion(ANexusMinionBase* Minion);
+	void UnregisterCombatUnit(ANexusCharacterBase* Unit);
 
 	UFUNCTION(BlueprintPure)
 	bool IsMinionInside(ANexusMinionBase* Minion) const;
+
+	UFUNCTION(BlueprintCallable)
+	ANexusCharacterBase* FindClosestEnemyFor(ANexusCharacterBase* RequestingUnit) const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
@@ -77,6 +81,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Capture")
 	TArray<TObjectPtr<ANexusMinionBase>> TeamBMinions;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Capture")
+	TArray<TObjectPtr<ANexusCharacterBase>> TeamAPlayers;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Capture")
+	TArray<TObjectPtr<ANexusCharacterBase>> TeamBPlayers;
+
 	UFUNCTION()
 	void OnCaptureAreaBeginOverlap(
 		UPrimitiveComponent* OverlappedComponent,
@@ -98,6 +108,9 @@ protected:
 	void EvaluateControl(float DeltaTime);
 	void ResolveCapture(ENexusTeamID ScoringTeam);
 	void CleanupInvalidMinions();
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Abilities")
+	void BP_OnResolveCapture();
 
 	int32 GetValidMinionCountForTeam(ENexusTeamID TeamID) const;
 	TArray<TObjectPtr<ANexusMinionBase>>& GetMinionArrayForTeam(ENexusTeamID TeamID);

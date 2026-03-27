@@ -22,7 +22,7 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 	{
 		if (LastActivatedAbilitySpecs.Num() != ActivatableAbilities.Items.Num())
 		{
-			Character->SendAbilitiesChangedEvent();
+			Character->BroadcastAbilitiesChanged();
 			LastActivatedAbilitySpecs = ActivatableAbilities.Items;
 		}
 		else
@@ -31,7 +31,7 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 			{
 				if (LastActivatedAbilitySpecs[i].Ability != ActivatableAbilities.Items[i].Ability)
 				{
-					Character->SendAbilitiesChangedEvent();
+					Character->BroadcastAbilitiesChanged();
 					LastActivatedAbilitySpecs = ActivatableAbilities.Items;
 					break;
 				}

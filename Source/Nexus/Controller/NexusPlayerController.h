@@ -23,6 +23,13 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_Pawn() override;
+	virtual void Tick(float DeltaTime) override;
 
 	void RefreshHUDBindings();
+
+	UPROPERTY(BlueprintReadOnly, Category="Crosshair")
+	FHitResult CurrentCrosshairHit;
+	
+	UFUNCTION(BlueprintCallable, Category="Crosshair")
+	bool GetCrosshairHitResult(FHitResult& OutHit, float TraceDistance) const;
 };

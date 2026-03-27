@@ -7,8 +7,6 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
-#include "Nexus/Debug/NexusDebugMacros.h"
-
 
 ANexusMinionBase::ANexusMinionBase()
 {
@@ -53,7 +51,7 @@ void ANexusMinionBase::ApplyTeamVisuals() const
 	}
 }
 
-AActor* ANexusMinionBase::FindTargetInFront()
+ANexusCharacterBase* ANexusMinionBase::FindTargetInFront()
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -128,7 +126,7 @@ AActor* ANexusMinionBase::FindTargetInFront()
 		}
 	}
 
-	return BestTarget;
+	return Cast<ANexusCharacterBase>(BestTarget);
 }
 
 bool ANexusMinionBase::IsTargetStillValid(AActor* Actor) const
@@ -168,6 +166,11 @@ bool ANexusMinionBase::IsTargetStillValid(AActor* Actor) const
 
 void ANexusMinionBase::UpdateTargetActor()
 {
+	if (bAtCapturePoint && CurrentCapturePoint)
+	{
+		TargetScanTimerHandle.Invalidate();
+		return;
+	}
 	AActor* NewTarget = CurrentTarget;
 
 	if (!IsTargetStillValid(CurrentTarget))
@@ -195,20 +198,11 @@ void ANexusMinionBase::UpdateTargetActor()
 	}
 }
 
-ANexusCapturePoint* ANexusMinionBase::GetCurrentCapturePoint()
-{
-	if (bAtCapturePoint)
-	{
-		return TargetCapturePoint;
-	}
-	return nullptr;
-}
-
 void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InCapturePoint, ENexusTeamID InTeamID)
 {
 	TargetCapturePoint = InCapturePoint;
 	SetTeamID(InTeamID);
-	bAtCapturePoint = false;
+	SetAtCapturePoint(false);
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
@@ -225,8 +219,13 @@ void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoin
 		return;
 	}
 
-	bAtCapturePoint = true;
+	FGameplayTagContainer Container;
+	Container.AddTag(FGameplayTag::RequestGameplayTag(FName("Status.Objective.Capturing")));
 
+	UAbilitySystemBlueprintLibrary::AddGameplayTags(this, Container, EGameplayTagReplicationState::TagOnly);
+	
+	SetAtCapturePoint(true);
+	CurrentCapturePoint = CapturePoint;
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		AI->StopMovement();
@@ -234,6 +233,39 @@ void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoin
 		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
 		{
 			BB->SetValueAsBool(TEXT("AtCapturePoint"), true);
+			BB->SetValueAsObject(TEXT("CapturePoint"), CapturePoint);
+		}
+	}
+}
+
+
+void ANexusMinionBase::SetAtCapturePoint(bool NewValue)
+{
+	bAtCapturePoint = NewValue;
+}
+
+void ANexusMinionBase::HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint)
+{
+	if (CapturePoint != CurrentCapturePoint)
+	{
+		return;
+	}
+
+	FGameplayTagContainer Container;
+	Container.AddTag(FGameplayTag::RequestGameplayTag(FName("Status.Objective.Capturing")));
+
+	UAbilitySystemBlueprintLibrary::RemoveGameplayTags(this, Container, EGameplayTagReplicationState::TagOnly);
+
+	SetAtCapturePoint(false);
+	CurrentCapturePoint = nullptr;
+	if (AAIController* AI = Cast<AAIController>(GetController()))
+	{
+		AI->StopMovement();
+
+		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
+		{
+			BB->SetValueAsBool(TEXT("AtCapturePoint"), false);
+			BB->SetValueAsObject(TEXT("CapturePoint"), TargetCapturePoint);
 		}
 	}
 }

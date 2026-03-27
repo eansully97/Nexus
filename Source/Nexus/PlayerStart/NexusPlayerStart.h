@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerStart.h"
-#include "Nexus/NexusTeamTypes.h"
+#include "Nexus/NexusEnumTypes.h"
 #include "NexusPlayerStart.generated.h"
 
 UCLASS()

@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
-#include "Nexus/NexusTeamTypes.h"
+#include "Nexus/NexusEnumTypes.h"
 #include "NexusPlayerState.generated.h"
 
 /**

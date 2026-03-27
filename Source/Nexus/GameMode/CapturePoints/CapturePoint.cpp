@@ -43,40 +43,138 @@ void ANexusCapturePoint::Tick(float DeltaTime)
 	EvaluateControl(DeltaTime);
 }
 
-void ANexusCapturePoint::RegisterMinion(ANexusMinionBase* Minion)
+void ANexusCapturePoint::RegisterCombatUnit(ANexusCharacterBase* Unit)
 {
-	if (!IsValid(Minion))
+	if (!IsValid(Unit))
 	{
 		return;
 	}
 
-	const ENexusTeamID TeamID = Minion->GetTeamID();
+	const ENexusTeamID TeamID = Unit->GetTeamID();
 	if (TeamID == ENexusTeamID::Neutral)
 	{
 		return;
 	}
 
-	TArray<TObjectPtr<ANexusMinionBase>>& TeamArray = GetMinionArrayForTeam(TeamID);
-	if (!TeamArray.Contains(Minion))
+
+	if (ANexusMinionBase* Minion = Cast<ANexusMinionBase>(Unit))
 	{
-		TeamArray.Add(Minion);
+		if (TeamID == ENexusTeamID::TeamA)
+		{
+			TeamAMinions.AddUnique(Minion);
+		}
+		else if (TeamID == ENexusTeamID::TeamB)
+		{
+			TeamBMinions.AddUnique(Minion);
+		}
+		return;
+	}
+	if (TeamID == ENexusTeamID::TeamA)
+	{
+		TeamAPlayers.AddUnique(Unit);
+	}
+	else if (TeamID == ENexusTeamID::TeamB)
+	{
+		TeamBPlayers.AddUnique(Unit);
 	}
 }
 
-void ANexusCapturePoint::UnregisterMinion(ANexusMinionBase* Minion)
+void ANexusCapturePoint::UnregisterCombatUnit(ANexusCharacterBase* Unit)
 {
-	if (!IsValid(Minion))
+	if (!IsValid(Unit))
 	{
 		return;
 	}
 
-	TeamAMinions.Remove(Minion);
-	TeamBMinions.Remove(Minion);
+	if (ANexusMinionBase* Minion = Cast<ANexusMinionBase>(Unit))
+	{
+		TeamAMinions.Remove(Minion);
+		TeamBMinions.Remove(Minion);
+	}
+	TeamAPlayers.Remove(Unit);
+	TeamBPlayers.Remove(Unit);
 }
 
 bool ANexusCapturePoint::IsMinionInside(ANexusMinionBase* Minion) const
 {
 	return TeamAMinions.Contains(Minion) || TeamBMinions.Contains(Minion);
+}
+
+ANexusCharacterBase* ANexusCapturePoint::FindClosestEnemyFor(ANexusCharacterBase* RequestingUnit) const
+{
+	if (!IsValid(RequestingUnit))
+	{
+		return nullptr;
+	}
+
+	ANexusCharacterBase* BestTarget = nullptr;
+	float BestDistanceSq = TNumericLimits<float>::Max();
+
+	const FVector RequesterLocation = RequestingUnit->GetActorLocation();
+
+	auto EvaluateCharacterArray = [&](const TArray<TObjectPtr<ANexusCharacterBase>>& Candidates)
+	{
+		for (ANexusCharacterBase* Candidate : Candidates)
+		{
+			if (!IsValid(Candidate) || Candidate->bIsDead)
+			{
+				continue;
+			}
+
+			if (!RequestingUnit->IsEnemyTo(Candidate))
+			{
+				continue;
+			}
+
+			const float DistSq = FVector::DistSquared(RequesterLocation, Candidate->GetActorLocation());
+			if (DistSq < BestDistanceSq)
+			{
+				BestDistanceSq = DistSq;
+				BestTarget = Candidate;
+			}
+		}
+	};
+
+	auto EvaluateMinionArray = [&](const TArray<TObjectPtr<ANexusMinionBase>>& Candidates)
+	{
+		for (ANexusMinionBase* Candidate : Candidates)
+		{
+			if (!IsValid(Candidate) || Candidate->bIsDead)
+			{
+				continue;
+			}
+
+			if (!RequestingUnit->IsEnemyTo(Candidate))
+			{
+				continue;
+			}
+
+			const float DistSq = FVector::DistSquared(RequesterLocation, Candidate->GetActorLocation());
+			if (DistSq < BestDistanceSq)
+			{
+				BestDistanceSq = DistSq;
+				BestTarget = Candidate;
+			}
+		}
+	};
+
+	switch (RequestingUnit->GetTeamID())
+	{
+	case ENexusTeamID::TeamA:
+		EvaluateMinionArray(TeamBMinions);
+		EvaluateCharacterArray(TeamBPlayers);
+		break;
+
+	case ENexusTeamID::TeamB:
+		EvaluateMinionArray(TeamAMinions);
+		EvaluateCharacterArray(TeamAPlayers);
+		break;
+
+	default:
+		break;
+	}
+
+	return BestTarget;
 }
 
 void ANexusCapturePoint::SetCapturePointMaterial(ENexusTeamID TeamID) const
@@ -113,11 +211,18 @@ void ANexusCapturePoint::OnCaptureAreaBeginOverlap(
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
-	ANexusMinionBase* Minion = Cast<ANexusMinionBase>(OtherActor);
-	if (Minion)
+	ANexusCharacterBase* Unit = Cast<ANexusCharacterBase>(OtherActor);
+	if (Unit)
 	{
-		RegisterMinion(Minion);
-		Minion->HandleReachedCapturePoint(this);
+		RegisterCombatUnit(Unit);
+		if (ANexusMinionBase* Minion = Cast<ANexusMinionBase>(Unit))
+		{
+			Minion->HandleReachedCapturePoint(this);
+		}
+		else
+		{
+			Unit->CurrentCapturePoint = this;
+		}
 	}
 }
 
@@ -127,10 +232,18 @@ void ANexusCapturePoint::OnCaptureAreaEndOverlap(
 	UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex)
 {
-	ANexusMinionBase* Minion = Cast<ANexusMinionBase>(OtherActor);
-	if (Minion)
+	ANexusCharacterBase* Unit = Cast<ANexusCharacterBase>(OtherActor);
+	if (Unit)
 	{
-		UnregisterMinion(Minion);
+		UnregisterCombatUnit(Unit);
+		if (ANexusMinionBase* Minion = Cast<ANexusMinionBase>(Unit))
+		{
+			Minion->HandleLeftCapturePoint(this);
+		}
+		else
+		{
+			Unit->CurrentCapturePoint = nullptr;
+		}
 	}
 }
 
@@ -262,5 +375,6 @@ void ANexusCapturePoint::ResolveCapture(ENexusTeamID ScoringTeam)
 	CurrentUncontestedTime = 0.f;
 	bIsContested = false;
 
+	BP_OnResolveCapture();
 	SetCapturePointMaterial(ENexusTeamID::Neutral);
 }

@@ -20,10 +20,7 @@ void UNexusWeaponsManager::BeginPlay()
 	Super::BeginPlay();
 	
 	OwnerCharacter = Cast<ANexusCharacterBase>(GetOwner());
-	if (OwnerCharacter == nullptr)
-	{
-		OwnerCharacter = Cast<ANexusCharacterBase>(GetOwner());
-	}
+	
 }
 
 void UNexusWeaponsManager::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -60,6 +57,7 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.Owner = OwnerCharacter;
 	SpawnParameters.Instigator = OwnerCharacter;
+	
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -67,24 +65,31 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 	}
 	ANexusWeaponBase* Weapon = World->SpawnActor<ANexusWeaponBase>(
 		WeaponClassToEquip,
-		FVector(),
-		FRotator(),
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
 		SpawnParameters
-		);
-	if (Weapon)
+	);
+
+	if (!Weapon)
 	{
-		EquippedWeapon = Weapon;
-		Weapon->SetOwnerCharacter(OwnerCharacter);
-		const FName SocketName = EquippedWeapon->WeaponData.SocketName;
-		EquippedWeapon->AttachToComponent(
-			OwnerCharacter->GetMesh(),
-			FAttachmentTransformRules::SnapToTargetIncludingScale,
-			SocketName
-			);
-			
-		WeaponAbilities = OwnerCharacter->GrantAbilities(EquippedWeapon->WeaponData.AbilitiesToGrant);
-		
+		return;
 	}
+	EquippedWeapon = Weapon;
+	Weapon->SetOwnerCharacter(OwnerCharacter);
+		
+	const FName SocketName = EquippedWeapon->WeaponData.SocketName;
+	EquippedWeapon->AttachToComponent(
+		OwnerCharacter->GetMesh(),
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		SocketName
+		);
+	
+	WeaponAbilities = OwnerCharacter->GrantAbilities(
+	EquippedWeapon->WeaponData.AbilitiesToGrant,
+	false,
+	true
+	);
+	
 	SetEquippedWeaponProperties();
 }
 
@@ -94,17 +99,22 @@ void UNexusWeaponsManager::Unequip()
 	{
 		return;
 	}
-	
+
 	ANexusWeaponBase* OldWeapon = EquippedWeapon;
 	EquippedWeapon = nullptr;
 
-	OwnerCharacter->RemoveAbilities(WeaponAbilities);
-	WeaponAbilities.Empty();
+	if (WeaponAbilities.Num() > 0)
+	{
+		OwnerCharacter->RemoveAbilities(WeaponAbilities);
+		WeaponAbilities.Empty();
+	}
+
 	if (OldWeapon)
 	{
 		OldWeapon->SetOwnerCharacter(nullptr);
 		OldWeapon->Destroy();
 	}
+
 	SetUnarmedProperties();
 }
 

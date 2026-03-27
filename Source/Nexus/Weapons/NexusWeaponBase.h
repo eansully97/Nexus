@@ -7,7 +7,7 @@
 #include "NexusWeaponBase.generated.h"
 
 class ANexusCharacterBase;
-class UGameplayAbility;
+class UNexusGameplayAbility;
 
 USTRUCT(BlueprintType)
 struct FWeaponConfig
@@ -15,7 +15,7 @@ struct FWeaponConfig
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
-	TArray<TSubclassOf<UGameplayAbility>> AbilitiesToGrant;
+	TArray<TSubclassOf<UNexusGameplayAbility>> AbilitiesToGrant;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	FName SocketName;

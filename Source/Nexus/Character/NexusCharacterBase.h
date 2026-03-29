@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,12 +7,21 @@
 #include "Nexus/NexusEnumTypes.h"
 #include "NexusCharacterBase.generated.h"
 
-class ANexusCapturePoint;
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilitiesChanged);
-
-class UNexusGameplayAbility;
-class UNexusWeaponsManager;
+class UAbilitySystemComponent;
 class UBasicAttributeSet;
+class UNexusGameplayAbility;
+class ANexusCapturePoint;
+class ANexusPlayerState;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCombatStateChanged);
+
+UENUM(BlueprintType)
+enum class ENexusAbilitySource : uint8
+{
+	Base,
+	Class,
+	Weapon
+};
 
 UCLASS()
 class NEXUS_API ANexusCharacterBase : public ACharacter, public IAbilitySystemInterface
@@ -24,148 +31,126 @@ class NEXUS_API ANexusCharacterBase : public ACharacter, public IAbilitySystemIn
 public:
 	ANexusCharacterBase();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TeamColor")
-	FLinearColor TeamAColor1;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TeamColor")
-	FLinearColor TeamAColor2;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TeamColor")
-	FLinearColor TeamBColor1;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TeamColor")
-	FLinearColor TeamBColor2;
-
-	void OnDeathStarted();
-	
-	UFUNCTION(BlueprintCallable)
-	void EnterRagdoll();
-
-	virtual void Die();
-
-	UPROPERTY(ReplicatedUsing = OnRep_TeamID)
-	ENexusTeamID TeamID;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Objective")
-	TObjectPtr<ANexusCapturePoint> CurrentCapturePoint = nullptr;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AbilitySystem")
-	UAbilitySystemComponent* AbilitySystemComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AbilitySystem")
-	UBasicAttributeSet* BasicAttributeSet;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UNexusWeaponsManager* WeaponsManager;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Montages")
-	UAnimMontage* DeathMontage;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Util", ReplicatedUsing=OnRep_IsDead)
-	bool bIsDead = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Util")
-	float RespawnTime = 6.f;
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 protected:
-
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
-	void SyncTeamFromPlayerState();
-	virtual void Tick(float DeltaTime) override;
-	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
-	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	
+
+	// --- Replicated shared combat state ---
+	UPROPERTY(ReplicatedUsing=OnRep_TeamID, VisibleAnywhere, BlueprintReadOnly, Category="Team")
+	ENexusTeamID TeamID = ENexusTeamID::Neutral;
+
+	UPROPERTY(ReplicatedUsing=OnRep_IsDead, VisibleAnywhere, BlueprintReadOnly, Category="State")
+	bool bIsDead = false;
+
+
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentCapturePoint, VisibleAnywhere, BlueprintReadOnly, Category="Objective")
+	TObjectPtr<ANexusCapturePoint> CurrentCapturePoint = nullptr;
+
+	// --- GAS ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
+	TObjectPtr<UBasicAttributeSet> BasicAttributeSet;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
+	EGameplayEffectReplicationMode AbilityReplicationMode = EGameplayEffectReplicationMode::Mixed;
+
+	// Optional shared default abilities.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
+	TArray<TSubclassOf<UNexusGameplayAbility>> BaseAbilities;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
+	TObjectPtr<UAnimMontage> DeathMontage = nullptr;
+
+	// Runtime tracking by source.
+	TArray<FGameplayAbilitySpecHandle> BaseAbilityHandles;
+	TArray<FGameplayAbilitySpecHandle> ClassAbilityHandles;
+	TArray<FGameplayAbilitySpecHandle> WeaponAbilityHandles;
+
+	// --- Rep notifies ---
 	UFUNCTION()
 	virtual void OnRep_TeamID();
 
 	UFUNCTION()
-	void OnRep_IsDead();
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AbilitySystem")
-	EGameplayEffectReplicationMode ReplicationMode = EGameplayEffectReplicationMode::Mixed;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AbilitySystem")
-	TArray<TSubclassOf<UNexusGameplayAbility>> StartingAbilities;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
-	bool bStartupAbilitiesGranted = false;
-
-	FTimerHandle DeferredAbilitiesChangedHandle;
+	virtual void OnRep_IsDead();
 
 	UFUNCTION()
-	void BroadcastAbilitiesChangedDeferred();
+	virtual void OnRep_CurrentCapturePoint();
 
-	UFUNCTION(BlueprintImplementableEvent, Category="BlueprintEvents")
-	void BP_OnDeathStarted();
+	// Shared handlers called by both authority and rep-notify.
+	virtual void HandleTeamChanged();
+	virtual void HandleDeathStateChanged();
+	virtual void HandleCurrentCapturePointChanged();
 
-	float CachedWalkSpeed;
-	float CachedAcceleration;
-	float CachedJumpHeight;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation Flag")
-	bool bUseUpperBody{false};
+	// Shared GAS init
+	virtual void InitializeAbilityActorInfo();
+	virtual void InitializeFromPlayerState();
+	virtual void InitializeCombatLoadout();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Objective")
-	bool bAtCapturePoint = false;
+public:
+	// ---- Team ----
+	UFUNCTION(BlueprintCallable, Category="Team")
+	void SetTeamID(ENexusTeamID NewTeamID);
 
-public:	
-	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	UFUNCTION(BlueprintPure, Category="Team")
+	ENexusTeamID GetTeamID() const { return TeamID; }
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
-	TArray<FGameplayAbilitySpecHandle> StartupAbilitySpecHandles;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
-	TArray<FGameplayAbilitySpecHandle> TemporaryAbilitySpecHandles;
-
-	UFUNCTION(BlueprintCallable, Category = "AbilitySystem")
-	TArray<FGameplayAbilitySpecHandle> GrantAbilities(
-		const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant,
-		bool bTrackAsStartupAbilities = false,
-		bool bTrackAsTemporaryAbilities = false
-	);
-
-	UFUNCTION(BlueprintCallable, Category = "AbilitySystem")
-	void RemoveAbilities(const TArray<FGameplayAbilitySpecHandle>& SpecHandles);
-
-	UFUNCTION(BlueprintCallable, Category = "AbilitySystem")
-	void RemoveStartupAbilities();
-
-	UFUNCTION(BlueprintCallable, Category = "AbilitySystem")
-	void RemoveTemporaryAbilities();
-
-	UPROPERTY(BlueprintAssignable, Category="AbilitySystem")
-	FOnAbilitiesChanged OnAbilitiesChanged;
-
-	UFUNCTION(Client, Reliable)
-	void Client_NotifyAbilitiesChanged();
-
-	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
-	void BroadcastAbilitiesChanged();
-
-	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void SetCharacterSpeedToZero();
-
-	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void RestoreCharacterMovement();
-
-	UFUNCTION(BlueprintCallable)
-	ENexusTeamID GetTeamID() const;
-
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, Category="Team")
 	virtual void ApplyTeamVisuals() const;
-	
-	UFUNCTION(BlueprintCallable)
-	void SetTeamID(ENexusTeamID InTeamID);
-	
-	UFUNCTION(BlueprintCallable)
+
+	UFUNCTION(BlueprintCallable, Category="Team")
 	bool IsFriendlyTo(AActor* OtherActor) const;
-	
-	UFUNCTION(BlueprintCallable)
+
+	UFUNCTION(BlueprintCallable, Category="Team")
 	bool IsEnemyTo(AActor* OtherActor) const;
 
-	UFUNCTION(BlueprintCallable)
-	ANexusCapturePoint* GetCurrentCapturePoint();
+	// ---- Capture point occupancy ----
+	UFUNCTION(BlueprintCallable, Category="Objective")
+	void SetCurrentCapturePoint(ANexusCapturePoint* NewCapturePoint);
+
+	UFUNCTION(BlueprintPure, Category="Objective")
+	ANexusCapturePoint* GetCurrentCapturePoint() const { return CurrentCapturePoint; }
+
+	// ---- Death ----
+	UFUNCTION(BlueprintCallable, Category="State")
+	virtual void Die();
+
+	UFUNCTION(BlueprintImplementableEvent, Category="State")
+	void BP_OnDeathStarted();
+
+	virtual void ApplyDeathState_Server();
+	virtual void ApplyDeathPresentation();
+
+	UFUNCTION(BlueprintCallable, Category="State")
+	void EnterRagdoll();
+
+	// ---- Abilities by source ----
+	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
+	TArray<FGameplayAbilitySpecHandle> GrantAbilitySet(
+		ENexusAbilitySource Source,
+		const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant);
+
+	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
+	void ClearAbilitySet(ENexusAbilitySource Source);
+
+	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
+	void ClearAllGrantedAbilitySets();
+
+protected:
+	TArray<FGameplayAbilitySpecHandle>& GetHandleArrayForSource(ENexusAbilitySource Source);
+	bool HasGrantedAbilityClass(TSubclassOf<UNexusGameplayAbility> AbilityClass) const;
+
+public:
+	UPROPERTY(BlueprintAssignable, Category="Events")
+	FOnCombatStateChanged OnCombatStateChanged;
+
+	FORCEINLINE bool GetIsDead() const { return bIsDead; }
 };

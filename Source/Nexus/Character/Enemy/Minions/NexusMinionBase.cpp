@@ -1,12 +1,11 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "NexusMinionBase.h"
 
-
-#include "NexusMinionBase.h"
-
-#include "AbilitySystemBlueprintLibrary.h"
-#include "Kismet/KismetSystemLibrary.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/GameMode/CapturePoints/CapturePoint.h"
+#include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
 ANexusMinionBase::ANexusMinionBase()
 {
@@ -19,213 +18,50 @@ void ANexusMinionBase::BeginPlay()
 
 	if (HasAuthority())
 	{
-		GetWorldTimerManager().SetTimer(
-			TargetScanTimerHandle,
-			this,
-			&ANexusMinionBase::UpdateTargetActor,
-			0.08f,
-			true
-		);
+		StartTargetScan();
 	}
 }
 
-void ANexusMinionBase::OnRep_TeamID()
+void ANexusMinionBase::InitializeCombatLoadout()
 {
-	Super::OnRep_TeamID();
-	ApplyTeamVisuals();
-}
+	Super::InitializeCombatLoadout();
 
-void ANexusMinionBase::ApplyTeamVisuals() const
-{
-	Super::ApplyTeamVisuals();
-
-	switch (TeamID)
+	if (HasAuthority() && BaseAbilities.Num() > 0)
 	{
-	case ENexusTeamID::TeamA:
-		GetMesh()->SetSkeletalMeshAsset(TeamAMesh);
-		break;
-	case ENexusTeamID::TeamB:
-		GetMesh()->SetSkeletalMeshAsset(TeamBMesh);
-		break;
-	default: ;
+		GrantAbilitySet(ENexusAbilitySource::Base, BaseAbilities);
 	}
 }
 
-ANexusCharacterBase* ANexusMinionBase::FindTargetInFront()
+void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID)
 {
-	UWorld* World = GetWorld();
-	if (!World)
+	if (!HasAuthority())
 	{
-		return nullptr;
-	}
-
-	TArray<AActor*> OverlappedActors;
-	TArray<AActor*> ActorsToIgnore;
-	ActorsToIgnore.Add(this);
-
-	UKismetSystemLibrary::SphereOverlapActors(
-		World,
-		GetActorLocation(),
-		AggroRange,
-		TArray<TEnumAsByte<EObjectTypeQuery>>{UEngineTypes::ConvertToObjectType(ECC_Pawn)},
-		ANexusCharacterBase::StaticClass(),
-		ActorsToIgnore,
-		OverlappedActors
-	);
-
-	AActor* BestTarget = nullptr;
-	float BestDistanceSq = TNumericLimits<float>::Max();
-
-	const FVector MyLocation = GetActorLocation();
-	const FVector Forward = GetActorForwardVector();
-
-	for (AActor* Actor : OverlappedActors)
-	{
-		ANexusCharacterBase* Candidate = Cast<ANexusCharacterBase>(Actor);
-		if (!Candidate)
-		{
-			continue;
-		}
-
-		if (Candidate == this)
-		{
-			continue;
-		}
-
-		if (!IsEnemyTo(Candidate))
-		{
-			continue;
-		}
-
-		if (Candidate->bIsDead)
-		{
-			continue;
-		}
-
-		FVector ToTarget = Candidate->GetActorLocation() - MyLocation;
-		const float DistSq = ToTarget.SizeSquared();
-
-		if (DistSq <= KINDA_SMALL_NUMBER)
-		{
-			continue;
-		}
-
-		ToTarget.Normalize();
-
-		const float Dot = FVector::DotProduct(Forward, ToTarget);
-
-		if (Dot < 0.15f)
-		{
-			continue;
-		}
-
-		if (DistSq < BestDistanceSq)
-		{
-			BestDistanceSq = DistSq;
-			BestTarget = Candidate;
-		}
-	}
-
-	return Cast<ANexusCharacterBase>(BestTarget);
-}
-
-bool ANexusMinionBase::IsTargetStillValid(AActor* Actor) const
-{
-	ANexusCharacterBase* Candidate = Cast<ANexusCharacterBase>(Actor);
-	if (!Candidate)
-	{
-		return false;
-	}
-
-	if (Candidate == this)
-	{
-		return false;
-	}
-
-	if (!IsEnemyTo(Candidate))
-	{
-		return false;
-	}
-
-	if (Candidate->bIsDead)
-	{
-		return false;
-	}
-
-	const float DistSq = FVector::DistSquared(GetActorLocation(), Candidate->GetActorLocation());
-	const float LoseRangeSq = LoseTargetRange * LoseTargetRange;
-
-	if (DistSq > LoseRangeSq)
-	{
-		return false;
-	}
-	
-
-	return true;
-}
-
-void ANexusMinionBase::UpdateTargetActor()
-{
-	if (bAtCapturePoint && CurrentCapturePoint)
-	{
-		TargetScanTimerHandle.Invalidate();
 		return;
 	}
-	AActor* NewTarget = CurrentTarget;
 
-	if (!IsTargetStillValid(CurrentTarget))
-	{
-		NewTarget = FindTargetInFront();
-	}
-
-	if (CurrentTarget != NewTarget)
-	{
-		CurrentTarget = NewTarget;
-
-		if (AAIController* AI = Cast<AAIController>(GetController()))
-		{
-			if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
-			{
-				BB->SetValueAsObject(TEXT("TargetActor"), CurrentTarget);
-				FGameplayEventData EventData;
-				EventData.EventTag = FGameplayTag::RequestGameplayTag(FName("Event.Enemy.TargetUpdated"));
-				EventData.Instigator = this;
-				EventData.Target = this;
-
-				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, EventData.EventTag, EventData);
-			}
-		}
-	}
-}
-
-void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InCapturePoint, ENexusTeamID InTeamID)
-{
-	TargetCapturePoint = InCapturePoint;
+	TargetCapturePoint = InTargetCapturePoint;
 	SetTeamID(InTeamID);
-	SetAtCapturePoint(false);
+	SetCurrentCapturePoint(nullptr);
+
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
 		{
-			BB->SetValueAsObject(TEXT("CapturePoint"), InCapturePoint);
+			BB->SetValueAsObject(TEXT("CapturePoint"), InTargetCapturePoint);
+			BB->SetValueAsBool(TEXT("AtCapturePoint"), false);
 		}
 	}
 }
 
 void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoint)
 {
-	if (CapturePoint != TargetCapturePoint)
+	if (!HasAuthority() || CapturePoint != TargetCapturePoint)
 	{
 		return;
 	}
 
-	FGameplayTagContainer Container;
-	Container.AddTag(FGameplayTag::RequestGameplayTag(FName("Status.Objective.Capturing")));
+	SetCurrentCapturePoint(CapturePoint);
 
-	UAbilitySystemBlueprintLibrary::AddGameplayTags(this, Container, EGameplayTagReplicationState::TagOnly);
-	
-	SetAtCapturePoint(true);
-	CurrentCapturePoint = CapturePoint;
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		AI->StopMovement();
@@ -238,34 +74,219 @@ void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoin
 	}
 }
 
-
-void ANexusMinionBase::SetAtCapturePoint(bool NewValue)
-{
-	bAtCapturePoint = NewValue;
-}
-
 void ANexusMinionBase::HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint)
 {
-	if (CapturePoint != CurrentCapturePoint)
+	if (!HasAuthority() || CapturePoint != GetCurrentCapturePoint())
 	{
 		return;
 	}
 
-	FGameplayTagContainer Container;
-	Container.AddTag(FGameplayTag::RequestGameplayTag(FName("Status.Objective.Capturing")));
+	SetCurrentCapturePoint(nullptr);
 
-	UAbilitySystemBlueprintLibrary::RemoveGameplayTags(this, Container, EGameplayTagReplicationState::TagOnly);
-
-	SetAtCapturePoint(false);
-	CurrentCapturePoint = nullptr;
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
-		AI->StopMovement();
-
 		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
 		{
 			BB->SetValueAsBool(TEXT("AtCapturePoint"), false);
 			BB->SetValueAsObject(TEXT("CapturePoint"), TargetCapturePoint);
+		}
+	}
+}
+
+void ANexusMinionBase::ApplyTeamVisuals() const
+{
+	Super::ApplyTeamVisuals();
+
+	if (!GetMesh())
+	{
+		return;
+	}
+
+	switch (TeamID)
+	{
+	case ENexusTeamID::TeamA:
+		if (TeamAMesh)
+		{
+			GetMesh()->SetSkeletalMeshAsset(TeamAMesh);
+		}
+		break;
+
+	case ENexusTeamID::TeamB:
+		if (TeamBMesh)
+		{
+			GetMesh()->SetSkeletalMeshAsset(TeamBMesh);
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ANexusMinionBase::StartTargetScan()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		TargetScanTimerHandle,
+		this,
+		&ANexusMinionBase::UpdateTargetActor,
+		0.10f,
+		true
+	);
+}
+
+void ANexusMinionBase::StopTargetScan()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(TargetScanTimerHandle);
+}
+
+bool ANexusMinionBase::IsValidTarget(ANexusCharacterBase* Candidate) const
+{
+	if (!Candidate || Candidate == this)
+	{
+		return false;
+	}
+
+	if (Candidate->GetIsDead())
+	{
+		return false;
+	}
+
+	if (!IsEnemyTo(Candidate))
+	{
+		return false;
+	}
+
+	const float DistSq = FVector::DistSquared(GetActorLocation(), Candidate->GetActorLocation());
+	if (DistSq > FMath::Square(AggroRange))
+	{
+		return false;
+	}
+
+	if (GetCurrentCapturePoint() && !IsWithinDefendLeash(Candidate))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool ANexusMinionBase::IsWithinDefendLeash(const AActor* Actor) const
+{
+	if (!Actor)
+	{
+		return false;
+	}
+
+	const ANexusCapturePoint* AnchorPoint = GetCurrentCapturePoint() ? GetCurrentCapturePoint() : TargetCapturePoint;
+	if (!AnchorPoint)
+	{
+		return true;
+	}
+
+	const float DistSq = FVector::DistSquared(AnchorPoint->GetActorLocation(), Actor->GetActorLocation());
+	return DistSq <= FMath::Square(DefendLeashRadius);
+}
+
+bool ANexusMinionBase::IsInsideMyCaptureContext(const ANexusCharacterBase* Candidate) const
+{
+	if (!Candidate)
+	{
+		return false;
+	}
+
+	return GetCurrentCapturePoint() && Candidate->GetCurrentCapturePoint() == GetCurrentCapturePoint();
+}
+
+float ANexusMinionBase::ScoreTarget(ANexusCharacterBase* Candidate) const
+{
+	if (!IsValidTarget(Candidate))
+	{
+		return -FLT_MAX;
+	}
+
+	float Score = 0.f;
+
+	if (IsInsideMyCaptureContext(Candidate))
+	{
+		Score += CapturePointPriorityBonus;
+	}
+
+	const float Distance = FVector::Dist(GetActorLocation(), Candidate->GetActorLocation());
+	Score -= Distance;
+
+	return Score;
+}
+
+AActor* ANexusMinionBase::FindBestTarget() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	TArray<AActor*> OverlappedActors;
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(const_cast<ANexusMinionBase*>(this));
+
+	UKismetSystemLibrary::SphereOverlapActors(
+		World,
+		GetActorLocation(),
+		AggroRange,
+		TArray<TEnumAsByte<EObjectTypeQuery>>{UEngineTypes::ConvertToObjectType(ECC_Pawn)},
+		ANexusCharacterBase::StaticClass(),
+		ActorsToIgnore,
+		OverlappedActors
+	);
+
+	AActor* BestActor = nullptr;
+	float BestScore = -FLT_MAX;
+
+	for (AActor* Actor : OverlappedActors)
+	{
+		ANexusCharacterBase* Candidate = Cast<ANexusCharacterBase>(Actor);
+		const float Score = ScoreTarget(Candidate);
+
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			BestActor = Candidate;
+		}
+	}
+
+	return BestActor;
+}
+
+void ANexusMinionBase::UpdateTargetActor()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	AActor* NewTarget = FindBestTarget();
+	if (CurrentTarget == NewTarget)
+	{
+		return;
+	}
+
+	CurrentTarget = NewTarget;
+
+	if (AAIController* AI = Cast<AAIController>(GetController()))
+	{
+		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
+		{
+			BB->SetValueAsObject(TEXT("TargetActor"), CurrentTarget);
 		}
 	}
 }

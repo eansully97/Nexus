@@ -3,7 +3,7 @@
 
 #include "NexusGameplayAbility.h"
 #include "Nexus/NexusEnumTypes.h"
-#include "Nexus/DataAssets/DataAsset_AbilityInfo.h"
+#include "Nexus/DataAssets/AbilityInfo.h"
 
 EAbilityContainerInfo UNexusGameplayAbility::GetContainerToShowIn() const
 {

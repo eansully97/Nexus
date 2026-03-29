@@ -64,7 +64,7 @@ void UNexusAbilityContainer::BindAbilitiesChangedEvent()
 		return;
 	}
 
-	ObservedCharacter->OnAbilitiesChanged.AddDynamic(
+	ObservedCharacter->OnCombatStateChanged.AddDynamic(
 		this,
 		&UNexusAbilityContainer::HandleAbilitiesChanged
 	);
@@ -77,7 +77,7 @@ void UNexusAbilityContainer::UnbindAbilitiesChangedEvent()
 		return;
 	}
 
-	ObservedCharacter->OnAbilitiesChanged.RemoveDynamic(
+	ObservedCharacter->OnCombatStateChanged.RemoveDynamic(
 		this,
 		&UNexusAbilityContainer::HandleAbilitiesChanged
 	);
@@ -117,10 +117,14 @@ void UNexusAbilityContainer::GetAbilitiesForContainer()
 		{
 			continue;
 		}
+		if (AbilitiesForContainer.Contains(SpecHandle))
+		{
+			continue;
+		}
 
 		if (NexusAbility->GetContainerToShowIn() == ContainerType)
 		{
-			AbilitiesForContainer.Add(SpecHandle);
+			AbilitiesForContainer.AddUnique(SpecHandle);
 		}
 	}
 }

@@ -10,6 +10,11 @@ void ANexusHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
+	
+}
+
+void ANexusHUD::InitMainHUDWidget()
+{
 	if (MainHUDWidgetClass)
 	{
 		MainHUDWidget = CreateWidget<UNexusMainHUDWidget>(GetWorld(), MainHUDWidgetClass);

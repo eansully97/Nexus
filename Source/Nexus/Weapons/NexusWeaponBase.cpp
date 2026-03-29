@@ -8,7 +8,7 @@
 
 ANexusWeaponBase::ANexusWeaponBase()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 	AActor::SetReplicateMovement(true);
 
@@ -16,21 +16,3 @@ ANexusWeaponBase::ANexusWeaponBase()
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetRootComponent(WeaponMesh);
 }
-
-
-void ANexusWeaponBase::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
-void ANexusWeaponBase::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}
-
-void ANexusWeaponBase::SetOwnerCharacter(AActor* InActor)
-{
-	OwnerCharacter = Cast<ANexusCharacterBase>(InActor);
-	SetOwner(InActor);
-}
-

@@ -6,16 +6,141 @@
 #include "EngineUtils.h"
 #include "Nexus/GameState/NexusGameState.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/Controller/NexusPlayerController.h"
 #include "Nexus/Debug/NexusLog.h"
+#include "Camera/CameraActor.h"
+#include "Kismet/GameplayStatics.h"
 #include "Nexus/PlayerStart/NexusPlayerStart.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
+
+
+ANexusGameMode::ANexusGameMode()
+{
+	bDelayedStart = true;
+}
+
+void ANexusGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (ANexusGameState* GS = GetGameState<ANexusGameState>())
+	{
+		GS->bClassSelectOpen = true;
+		GS->OnRep_ClassSelectOpen(); // manually trigger on server
+	}
+}
 
 
 void ANexusGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+	
 	AssignTeamToPlayer(NewPlayer);
 	ApplyPlayerStateTeamToPawn(NewPlayer);
+
+	if (ANexusPlayerState* PS = NewPlayer->GetPlayerState<ANexusPlayerState>())
+	{
+		PS->SetCharacterClassInfo(nullptr);
+		PS->SetSelectionLockedIn(false);
+	}
+
+	if (ANexusGameState* GS = GetGameState<ANexusGameState>())
+	{
+		if (GS->bClassSelectOpen)
+		{
+			if (ANexusPlayerController* PC = Cast<ANexusPlayerController>(NewPlayer))
+			{
+				PC->ClientRestart(nullptr); // optional, not required
+			}
+		}
+	}
+
+	RefreshReadyStatus();
+}
+
+bool ANexusGameMode::IsClassSelectionOpen() const
+{
+	const ANexusGameState* GS = GetGameState<ANexusGameState>();
+	return GS && GS->bClassSelectOpen && GetMatchState() == MatchState::WaitingToStart;
+}
+
+bool ANexusGameMode::IsValidClassChoice(class UCharacterClassInfo* InClassInfo) const
+{
+	return AvailableClasses.Contains(InClassInfo);
+}
+
+void ANexusGameMode::RefreshReadyStatus()
+{
+	ANexusGameState* GS = GetGameState<ANexusGameState>();
+	if (!GS || !GameState)
+	{
+		return;
+	}
+
+	int32 TotalPlayers = 0;
+	int32 ReadyPlayers = 0;
+
+	for (APlayerState* BasePS : GameState->PlayerArray)
+	{
+		ANexusPlayerState* PS = Cast<ANexusPlayerState>(BasePS);
+		if (!PS)
+		{
+			continue;
+		}
+
+		++TotalPlayers;
+
+		if (PS->GetCharacterClassInfo() && PS->GetSelectionLockedIn())
+		{
+			++ReadyPlayers;
+		}
+	}
+
+	GS->ReadyPlayerCount = ReadyPlayers;
+
+	if (TotalPlayers > 0 && ReadyPlayers == TotalPlayers)
+	{
+		StartMatch();
+	}
+}
+
+bool ANexusGameMode::ReadyToStartMatch_Implementation()
+{
+	return Super::ReadyToStartMatch_Implementation();
+}
+
+void ANexusGameMode::HandleMatchIsWaitingToStart()
+{
+	Super::HandleMatchIsWaitingToStart();
+	
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ANexusPlayerController* NexusPC = Cast<ANexusPlayerController>(It->Get());
+		if (NexusPC)
+		{
+			NexusPC->ClientShowWaitingCamera();
+		}
+	}
+}
+
+void ANexusGameMode::HandleMatchHasStarted()
+{
+	Super::HandleMatchHasStarted();
+
+	if (ANexusGameState* GS = GetGameState<ANexusGameState>())
+	{
+		GS->bClassSelectOpen = false;
+		GS->SetMatchState(FName("InProgress"));
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ANexusPlayerController* NexusPC = Cast<ANexusPlayerController>(It->Get());
+		if (NexusPC)
+		{
+			NexusPC->ClientReturnToPawnCamera();
+		}
+	}
 }
 
 ENexusTeamID ANexusGameMode::GetNextTeamAssignment() const
@@ -133,7 +258,7 @@ void ANexusGameMode::ApplyPlayerStateTeamToPawn(const AController* Controller)
 	{
 		return;
 	}
-
+	
 	NexusCharacter->SetTeamID(NexusPS->GetTeamID());
 }
 

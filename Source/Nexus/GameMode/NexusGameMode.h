@@ -15,13 +15,26 @@ class NEXUS_API ANexusGameMode : public AGameMode
 {
 	GENERATED_BODY()
 public:
-
+	ANexusGameMode();
+	
+	virtual void BeginPlay() override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+	
+	virtual bool ReadyToStartMatch_Implementation() override;
+	
+	virtual void HandleMatchHasStarted() override;
+	virtual void HandleMatchIsWaitingToStart() override;
+	
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
+	
 	virtual void RestartPlayer(AController* NewPlayer) override;
-
 	void RequestRespawn(AController* Controller, float Delay = 3.f);
+	
 	void AddScoreForTeam(ENexusTeamID ScoringTeam, int32 Score);
+
+	bool IsClassSelectionOpen() const;
+	bool IsValidClassChoice(class UCharacterClassInfo* InClassInfo) const;
+	void RefreshReadyStatus();
 
 protected:
 	UFUNCTION()
@@ -35,4 +48,7 @@ protected:
 	
 	UFUNCTION()
 	void HandleRespawn(AController* Controller);
+
+	UPROPERTY(EditDefaultsOnly, Category="Classes")
+	TArray<TObjectPtr<UCharacterClassInfo>> AvailableClasses;
 };

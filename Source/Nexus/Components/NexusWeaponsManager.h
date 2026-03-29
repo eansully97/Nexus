@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "Components/ActorComponent.h"
+#include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "NexusWeaponsManager.generated.h"
 
 
+class ANexusPlayerCharacter;
 class ANexusCharacterBase;
 class ANexusWeaponBase;
 
@@ -24,33 +26,24 @@ public:
 	TObjectPtr<ANexusWeaponBase> EquippedWeapon;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
-	TObjectPtr<ANexusCharacterBase> OwnerCharacter;
+	TObjectPtr<ANexusPlayerCharacter> OwnerCharacter;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	TSubclassOf<UAnimInstance> DefaultAnimInstanceClass;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
 	TArray<FGameplayAbilitySpecHandle> WeaponAbilities;
-
+	
 protected:
-
 	virtual void BeginPlay() override;
-
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
-
 	
 	UFUNCTION()
 	void OnRep_EquippedWeapon();
-
+	
 public:
-
 	UFUNCTION(BlueprintCallable)
 	void Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip);
-	
-	void Unequip();
-	UFUNCTION(Server,Reliable, BlueprintCallable)
-	void Server_Unequip();
 
-	void SetEquippedWeaponProperties() const;
-	void SetUnarmedProperties() const;
+	void SetEquippedWeaponProperties();
 };

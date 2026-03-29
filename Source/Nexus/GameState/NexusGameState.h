@@ -6,6 +6,7 @@
 #include "GameFramework/GameState.h"
 #include "NexusGameState.generated.h"
 
+
 /**
  * 
  */
@@ -22,6 +23,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	int32 ScoreToWin = 10;
+	
+	UPROPERTY(ReplicatedUsing=OnRep_ClassSelectOpen, BlueprintReadOnly)
+	bool bClassSelectOpen = false;
+
+	UFUNCTION()
+	void OnRep_ClassSelectOpen();
+
+	UPROPERTY(Replicated, BlueprintReadOnly)
+	int32 ReadyPlayerCount = 0;
+
 protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

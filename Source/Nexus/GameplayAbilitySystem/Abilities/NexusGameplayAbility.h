@@ -8,7 +8,7 @@
 #include "NexusGameplayAbility.generated.h"
 
 
-class UDataAsset_AbilityInfo;
+class UAbilityInfo;
 /**
  * 
  */
@@ -19,7 +19,7 @@ class NEXUS_API UNexusGameplayAbility : public UGameplayAbility
 	
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityInfo")
-	UDataAsset_AbilityInfo* AbilityInfo;
+	UAbilityInfo* AbilityInfo;
 	
 	UFUNCTION(BlueprintCallable, Category="UI")
 	FText GetAbilityDisplayName() const;

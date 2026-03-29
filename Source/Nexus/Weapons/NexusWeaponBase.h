@@ -6,8 +6,9 @@
 #include "GameFramework/Actor.h"
 #include "NexusWeaponBase.generated.h"
 
-class ANexusCharacterBase;
 class UNexusGameplayAbility;
+class ANexusWeaponBase;
+class ANexusCharacterBase;
 
 USTRUCT(BlueprintType)
 struct FWeaponConfig
@@ -22,6 +23,9 @@ struct FWeaponConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	TSubclassOf<UAnimInstance> AnimInstanceClass;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
+	FVector SocketOffset;
 };
 
 UCLASS()
@@ -30,17 +34,12 @@ class NEXUS_API ANexusWeaponBase : public AActor
 	GENERATED_BODY()
 
 public:
-
 	ANexusWeaponBase();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
-	FWeaponConfig WeaponData;
+	FWeaponConfig WeaponConfig;
 
 protected:
-
-	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* WeaponMesh;
 
@@ -48,7 +47,5 @@ protected:
 	ANexusCharacterBase* OwnerCharacter;
 
 public:
-
-	UFUNCTION(BLueprintCallable)
-	void SetOwnerCharacter(AActor* InActor);
+	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 };

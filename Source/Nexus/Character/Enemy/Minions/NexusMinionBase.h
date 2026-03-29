@@ -1,11 +1,11 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "Nexus/GameMode/CapturePoints/CapturePoint.h"
 #include "Nexus/Character/Enemy/NexusEnemyBase.h"
 #include "NexusMinionBase.generated.h"
+
+class ANexusCapturePoint;
+class UNexusGameplayAbility;
 
 UCLASS()
 class NEXUS_API ANexusMinionBase : public ANexusEnemyBase
@@ -16,44 +16,49 @@ public:
 	ANexusMinionBase();
 
 	UFUNCTION(BlueprintCallable)
-	void InitializeMinion(ANexusCapturePoint* InCapturePoint, ENexusTeamID InTeamID);
+	void InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID);
 
 	UFUNCTION(BlueprintCallable)
 	void HandleReachedCapturePoint(ANexusCapturePoint* CapturePoint);
 
-	void SetAtCapturePoint(bool NewValue);
+	UFUNCTION(BlueprintCallable)
 	void HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint);
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void OnRep_TeamID() override;
+	virtual void InitializeCombatLoadout() override;
 	virtual void ApplyTeamVisuals() const override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Objective")
-	TObjectPtr<ANexusCapturePoint> TargetCapturePoint = nullptr;
-
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Objective")
+	ANexusCapturePoint* TargetCapturePoint = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
+	float AggroRange = 650.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float AggroRange = 200.f;
+	float DefendLeashRadius = 900.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float LoseTargetRange = 250.f;
+	float CapturePointPriorityBonus = 10000.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI")
-	AActor* CurrentTarget = nullptr;
+	TObjectPtr<AActor> CurrentTarget = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Visual")
+	TObjectPtr<USkeletalMesh> TeamAMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Visual")
+	TObjectPtr<USkeletalMesh> TeamBMesh = nullptr;
 
 	FTimerHandle TargetScanTimerHandle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	USkeletalMesh* TeamAMesh{};
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	USkeletalMesh* TeamBMesh{};
-	
-
-public:
-	ANexusCharacterBase* FindTargetInFront();
-	bool IsTargetStillValid(AActor* Actor) const;
+	void StartTargetScan();
+	void StopTargetScan();
 	void UpdateTargetActor();
 
+	AActor* FindBestTarget() const;
+	float ScoreTarget(ANexusCharacterBase* Candidate) const;
+	bool IsValidTarget(ANexusCharacterBase* Candidate) const;
+	bool IsWithinDefendLeash(const AActor* Actor) const;
+	bool IsInsideMyCaptureContext(const ANexusCharacterBase* Candidate) const;
 };

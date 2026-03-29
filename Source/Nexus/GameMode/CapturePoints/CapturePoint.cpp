@@ -116,7 +116,7 @@ ANexusCharacterBase* ANexusCapturePoint::FindClosestEnemyFor(ANexusCharacterBase
 	{
 		for (ANexusCharacterBase* Candidate : Candidates)
 		{
-			if (!IsValid(Candidate) || Candidate->bIsDead)
+			if (!IsValid(Candidate) || Candidate->GetIsDead())
 			{
 				continue;
 			}
@@ -139,7 +139,7 @@ ANexusCharacterBase* ANexusCapturePoint::FindClosestEnemyFor(ANexusCharacterBase
 	{
 		for (ANexusMinionBase* Candidate : Candidates)
 		{
-			if (!IsValid(Candidate) || Candidate->bIsDead)
+			if (!IsValid(Candidate) || Candidate->GetIsDead())
 			{
 				continue;
 			}
@@ -221,7 +221,7 @@ void ANexusCapturePoint::OnCaptureAreaBeginOverlap(
 		}
 		else
 		{
-			Unit->CurrentCapturePoint = this;
+			Unit->SetCurrentCapturePoint(this);
 		}
 	}
 }
@@ -242,7 +242,7 @@ void ANexusCapturePoint::OnCaptureAreaEndOverlap(
 		}
 		else
 		{
-			Unit->CurrentCapturePoint = nullptr;
+			Unit->SetCurrentCapturePoint(nullptr);
 		}
 	}
 }
@@ -253,7 +253,7 @@ void ANexusCapturePoint::CleanupInvalidMinions()
 	{
 		Array.RemoveAll([](const TObjectPtr<ANexusMinionBase>& Minion)
 		{
-			return !IsValid(Minion) || Minion->bIsDead;
+			return !IsValid(Minion) || Minion->GetIsDead();
 		});
 	};
 
@@ -268,7 +268,7 @@ int32 ANexusCapturePoint::GetValidMinionCountForTeam(ENexusTeamID TeamID) const
 	int32 Count = 0;
 	for (ANexusMinionBase* Minion : TeamArray)
 	{
-		if (IsValid(Minion) && !Minion->bIsDead)
+		if (IsValid(Minion) && !Minion->GetIsDead())
 		{
 			++Count;
 		}

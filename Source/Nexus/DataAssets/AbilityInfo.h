@@ -5,13 +5,13 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Nexus/NexusEnumTypes.h"
-#include "DataAsset_AbilityInfo.generated.h"
+#include "AbilityInfo.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class NEXUS_API UDataAsset_AbilityInfo : public UDataAsset
+class NEXUS_API UAbilityInfo : public UDataAsset
 {
 	GENERATED_BODY()
 public:

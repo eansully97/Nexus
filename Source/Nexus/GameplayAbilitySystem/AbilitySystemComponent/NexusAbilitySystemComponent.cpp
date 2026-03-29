@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#include "NexusAbilitySystemComponent.h"
+﻿#include "NexusAbilitySystemComponent.h"
 
 #include "Nexus/Character/NexusCharacterBase.h"
 
@@ -18,31 +16,50 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 {
 	Super::OnRep_ActivateAbilities();
 
-	if (ANexusCharacterBase* Character = Cast<ANexusCharacterBase>(GetOwner()))
+	ANexusCharacterBase* Character = Cast<ANexusCharacterBase>(GetOwner());
+	if (!Character)
 	{
-		if (LastActivatedAbilitySpecs.Num() != ActivatableAbilities.Items.Num())
+		return;
+	}
+
+	bool bChanged = false;
+
+	if (LastActivatedAbilitySpecs.Num() != ActivatableAbilities.Items.Num())
+	{
+		bChanged = true;
+	}
+	else
+	{
+		for (int32 i = 0; i < LastActivatedAbilitySpecs.Num(); ++i)
 		{
-			Character->BroadcastAbilitiesChanged();
-			LastActivatedAbilitySpecs = ActivatableAbilities.Items;
-		}
-		else
-		{
-			for (int32 i =0; i < LastActivatedAbilitySpecs.Num(); i++)
+			const FGameplayAbilitySpec* OldSpec = LastActivatedAbilitySpecs.IsValidIndex(i) ? &LastActivatedAbilitySpecs[i] : nullptr;
+			const FGameplayAbilitySpec* NewSpec = ActivatableAbilities.Items.IsValidIndex(i) ? &ActivatableAbilities.Items[i] : nullptr;
+
+			if (!OldSpec || !NewSpec)
 			{
-				if (LastActivatedAbilitySpecs[i].Ability != ActivatableAbilities.Items[i].Ability)
-				{
-					Character->BroadcastAbilitiesChanged();
-					LastActivatedAbilitySpecs = ActivatableAbilities.Items;
-					break;
-				}
+				bChanged = true;
+				break;
+			}
+
+			if (OldSpec->Ability != NewSpec->Ability)
+			{
+				bChanged = true;
+				break;
 			}
 		}
 	}
+
+	if (bChanged)
+	{
+		LastActivatedAbilitySpecs = ActivatableAbilities.Items;
+		Character->OnCombatStateChanged.Broadcast();
+	}
 }
 
-void UNexusAbilitySystemComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-                                                 FActorComponentTickFunction* ThisTickFunction)
+void UNexusAbilitySystemComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
-

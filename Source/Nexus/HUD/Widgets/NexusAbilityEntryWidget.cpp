@@ -5,7 +5,7 @@
 #include "Components/TextBlock.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
-#include "Nexus/DataAssets/DataAsset_AbilityInfo.h"
+#include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
 void UNexusAbilityEntryWidget::NativeDestruct()

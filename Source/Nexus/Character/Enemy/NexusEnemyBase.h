@@ -10,5 +10,5 @@ UCLASS()
 class NEXUS_API ANexusEnemyBase : public ANexusCharacterBase
 {
 	GENERATED_BODY()
-
+	// placeholder for now
 };

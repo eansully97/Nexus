@@ -17,6 +17,9 @@ class NEXUS_API ANexusHUD : public AHUD
 public:
 	virtual void BeginPlay() override;
 
+	UFUNCTION(BlueprintCallable)
+	void InitMainHUDWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	UNexusMainHUDWidget* GetMainHUDWidget() const { return MainHUDWidget; }
 

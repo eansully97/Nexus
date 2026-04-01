@@ -1,57 +1,126 @@
-# Unreal generated
-Binaries/
-DerivedDataCache/
-Intermediate/
-Saved/
+# Unreal Engine
+# Standard project-wide ignore rules for source control.
+# Keeps source assets/code/config, ignores generated files and build artifacts.
 
-# IDE
-.vs/
-.idea/
+# --------------------------------------------------
+# Core Unreal generated folders
+# --------------------------------------------------
+/Binaries/
+/DerivedDataCache/
+/Intermediate/
+/Saved/
+
+/Plugins/**/Binaries/
+/Plugins/**/DerivedDataCache/
+/Plugins/**/Intermediate/
+/Plugins/**/Saved/
+
+# --------------------------------------------------
+# Build / package / staging artifacts
+# --------------------------------------------------
+# Keep Build/ itself because projects may store icons/resources there.
+# Ignore common packaged/staged output inside it.
+/Build/**/*.pak
+/Build/**/*.ucas
+/Build/**/*.utoc
+/Build/**/*.sig
+/Build/**/*.exe
+/Build/**/*.app
+/Build/**/*.dmg
+/Build/**/*.ipa
+/Build/**/*.apk
+/Build/**/*.aab
+/Build/**/*.msi
+/Build/**/*.zip
+/Build/**/Manifest_*.txt
+/Build/**/FileOpenOrder/
+/Build/**/Metadata/
+/Build/**/StagedBuilds/
+/Build/**/Windows/
+/Build/**/WindowsNoEditor/
+/Build/**/Win64/
+/Build/**/Linux/
+/Build/**/Mac/
+/Build/**/Android/
+/Build/**/IOS/
+
+# Common package artifacts anywhere
+*.pak
+*.ucas
+*.utoc
+*.sig
+
+# --------------------------------------------------
+# IDE / editor files
+# --------------------------------------------------
+/.vs/
+/.vscode/
+/.idea/
+
 *.VC.db
 *.VC.opendb
 *.suo
+*.opensdf
+*.sdf
 *.user
-*.userosscache
-*.sln.docstates
-
-# Rider / JetBrains
+*.userprefs
+*.rsuser
 *.DotSettings.user
+*.opendb
+*.idb
+*.pdb
 
-# Build outputs / packaged game
-Build/**
-!Build/**/
-!Build/*.ico
-!Build/**/*.ico
-!Build/*.png
-!Build/**/*.png
-!Build/*.icns
-!Build/**/*.icns
-!Build/*.rc
-!Build/**/*.rc
-!Build/*.command
-!Build/**/*.command
-!Build/*.plist
-!Build/**/*.plist
-!Build/Android/
-!Build/Android/**
-
-# Keep source project structure
-Config/**
-Source/**
-Plugins/**
-*.uproject
+# Generated project files
 *.sln
-.vsconfig
+*.xcodeproj
+*.xcworkspace
 
-# Ignore all content by default
-Content/**
+# Optional helper file - keep if you want it
+!.vsconfig
 
-# Re-include only your project content
-!Content/Nexus/
-!Content/Nexus/**
+# --------------------------------------------------
+# Logs / temp / cache / OS junk
+# --------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.cache
+*.dmp
+*.pid
 
-# Optional: if plugins contain generated junk, ignore that inside plugins too
-Plugins/*/Binaries/
-Plugins/*/Intermediate/
-Plugins/*/Saved/
-Plugins/*/DerivedDataCache/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python cache (sometimes from helper scripts)
+__pycache__/
+*.pyc
+
+# --------------------------------------------------
+# Optional per-user Unreal config
+# --------------------------------------------------
+Config/DefaultEditorPerProjectUserSettings.ini
+# --------------------------------------------------
+# Keep core Unreal project files/folders
+# --------------------------------------------------
+!.gitignore
+!*.uproject
+!/Config/**
+!/Source/**
+
+# --------------------------------------------------
+# Plugins: keep real plugin files, ignore generated
+# --------------------------------------------------
+!/Plugins/
+!/Plugins/**/
+!/Plugins/**/*.uplugin
+!/Plugins/**/Source/**
+!/Plugins/**/Content/**
+!/Plugins/**/Resources/**
+
+# --------------------------------------------------
+# Content: ignore all, then re-include only Nexus
+# --------------------------------------------------
+/Content/*
+!/Content/Nexus/
+!/Content/Nexus/**

@@ -202,11 +202,7 @@ void UShadowStrike::StunTarget() const
 	{
 		return;
 	}
-	FGameplayEventData Payload;
-	Payload.Instigator = CachedSourceCharacter;
-	Payload.Target = CachedTargetCharacter;
-	Payload.EventMagnitude = 0.6f;
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(CachedTargetCharacter, FGameplayTag::RequestGameplayTag(FName("Event.Status.Stunned")), Payload);
+	CachedSourceCharacter->ApplyStunToTarget(CachedTargetCharacter, StunDuration);
 }
 
 void UShadowStrike::OnMontageCompleted()

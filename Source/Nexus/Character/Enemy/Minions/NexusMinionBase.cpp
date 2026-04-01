@@ -1,6 +1,7 @@
 ﻿#include "NexusMinionBase.h"
 
 #include "AIController.h"
+#include "GameplayCueFunctionLibrary.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Nexus/Character/NexusCharacterBase.h"
@@ -18,6 +19,104 @@ void ANexusMinionBase::BeginPlay()
 	if (HasAuthority())
 	{
 		StartTargetScan();
+	}
+}
+
+void ANexusMinionBase::StartHitscan()
+{
+	if (!HasAuthority() || !GetWorld())
+	{
+		return;
+	}
+
+	if (GetWorld()->GetTimerManager().IsTimerActive(HitscanTimerHandle))
+	{
+		return;
+	}
+
+	AlreadyHitCharactersInWindow.Reset();
+
+	// Immediate first trace so the hit window begins right away.
+	Hitscan();
+
+	GetWorld()->GetTimerManager().SetTimer(
+		HitscanTimerHandle,
+		this,
+		&ThisClass::Hitscan,
+		HitscanInterval,
+		true
+	);
+}
+
+void ANexusMinionBase::EndHitscan()
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(HitscanTimerHandle);
+	}
+
+	AlreadyHitCharactersInWindow.Reset();
+}
+
+void ANexusMinionBase::Hitscan()
+{
+	DoHitscan();
+}
+
+void ANexusMinionBase::DoHitscan()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp)
+	{
+		return;
+	}
+
+	if (!MeshComp->DoesSocketExist(TEXT("WeaponStartSocket")) ||
+		!MeshComp->DoesSocketExist(TEXT("WeaponEndSocket")))
+	{
+		return;
+	}
+
+	const FVector HitscanStartLoc = MeshComp->GetSocketLocation(TEXT("WeaponStartSocket"));
+	const FVector HitscanEndLoc = MeshComp->GetSocketLocation(TEXT("WeaponEndSocket"));
+
+	TArray<FHitResult> ValidHitResults;
+	TArray<ANexusCharacterBase*> CharactersToEffect = PerformSphereTraceForValidEnemies(
+		HitscanStartLoc,
+		HitscanEndLoc,
+		DamageHitScanRadius,
+		ValidHitResults);
+
+	const int32 NumPairs = FMath::Min(CharactersToEffect.Num(), ValidHitResults.Num());
+
+	for (int32 Index = 0; Index < NumPairs; ++Index)
+	{
+		ANexusCharacterBase* Character = CharactersToEffect[Index];
+		const FHitResult& HitResult = ValidHitResults[Index];
+
+		if (!IsValid(Character) || AlreadyHitCharactersInWindow.Contains(Character))
+		{
+			continue;
+		}
+
+		AlreadyHitCharactersInWindow.Add(Character);
+
+		ApplyDamageToTarget(Character, DamageToDeal);
+
+		FGameplayCueParameters Parameters;
+		Parameters.Location = HitResult.ImpactPoint;
+		Parameters.Normal = HitResult.ImpactNormal;
+		Parameters.Instigator = this;
+
+		UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
+			Character,
+			FGameplayTag::RequestGameplayTag(TEXT("GameplayCue.Damage.Burst")),
+			Parameters);
 	}
 }
 
@@ -58,6 +157,7 @@ void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoin
 	{
 		return;
 	}
+
 	bAtCapturePoint = true;
 	SetCurrentCapturePoint(CapturePoint);
 
@@ -240,19 +340,17 @@ AActor* ANexusMinionBase::FindBestTarget() const
 			continue;
 		}
 
-		// Direction to target (normalized)
 		FVector ToTarget = Candidate->GetActorLocation() - GetActorLocation();
-		ToTarget.Z = 0.f; // optional: ignore vertical difference (usually good for AI)
+		ToTarget.Z = 0.f;
 
 		if (!ToTarget.Normalize())
 		{
 			continue;
 		}
+
 		if (!bAtCapturePoint)
 		{
 			const float Dot = FVector::DotProduct(Forward, ToTarget);
-
-			// 🔥 Only allow targets in front
 			if (Dot < 0.34f)
 			{
 				continue;

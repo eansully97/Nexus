@@ -14,11 +14,9 @@ namespace NexusGameplayTags
 	// -------------------------
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Reactive_Parry);
 	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_EnemyBasicAttack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Movement_Dash);
-	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Projectile_Spawn);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Swing);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Block);
@@ -33,6 +31,8 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Cooldown
 	// -------------------------
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Enemy_Attack);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Dash);
 	
@@ -56,12 +56,14 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Event
 	// -------------------------
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Changed);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Dash);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Parry);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Updated);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Dash_Avtivated);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Parry_Activated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Impact);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Acticated);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Activated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Enemy_TargetUpdated);
 	
@@ -70,10 +72,6 @@ namespace NexusGameplayTags
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Explode);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Spawn);
-	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Apply_Status_Stunned);
-	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Weapon_Equip);
 
 	// -------------------------
 	// GameplayCue

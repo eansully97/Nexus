@@ -3,11 +3,13 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AIController.h"
+#include "GameplayCueFunctionLibrary.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
+#include "Nexus/DataAssets/GameplayEffectClassSet.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
@@ -114,8 +116,11 @@ void ANexusCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnemies(
 	const FVector& StartLocation,
 	const FVector& EndLocation,
-	float Radius)
+	float Radius,
+	TArray<FHitResult>& OutValidHitResults)
 {
+	OutValidHitResults.Reset();
+
 	if (!GetWorld())
 	{
 		return {};
@@ -124,7 +129,7 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 	TArray<AActor*> ActorsToIgnore;
 	ActorsToIgnore.Add(this);
 
-	TArray<FHitResult> HitResults;
+	TArray<FHitResult> RawHitResults;
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
@@ -139,9 +144,12 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 		ObjectTypes,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::None,
-		HitResults,
-		true
+		EDrawDebugTrace::ForDuration,
+		RawHitResults,
+		true,
+		FLinearColor::Red,
+	FLinearColor::Green,
+	1.f
 	);
 
 	if (!bHit)
@@ -149,7 +157,7 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 		return HitCharacters;
 	}
 
-	for (const FHitResult& Hit : HitResults)
+	for (const FHitResult& Hit : RawHitResults)
 	{
 		ANexusCharacterBase* HitCharacter = Cast<ANexusCharacterBase>(Hit.GetActor());
 		if (!IsValid(HitCharacter) || HitCharacter->GetIsDead())
@@ -162,7 +170,11 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 			continue;
 		}
 
-		HitCharacters.AddUnique(HitCharacter);
+		if (!HitCharacters.Contains(HitCharacter))
+		{
+			HitCharacters.Add(HitCharacter);
+			OutValidHitResults.Add(Hit);
+		}
 	}
 
 	return HitCharacters;
@@ -204,13 +216,71 @@ void ANexusCharacterBase::ApplyGameplayEffectSpecsToTargets(
 	}
 }
 
+void ANexusCharacterBase::ApplySetByCallerEffectToTarget(
+	ANexusCharacterBase* Target,
+	TSubclassOf<UGameplayEffect> EffectClass,
+	float Magnitude,
+	FGameplayTag DataTag)
+{
+	if (!IsValid(Target) || !EffectClass)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponent();
+	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+
+	if (!SourceASC || !TargetASC)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle ContextHandle = SourceASC->MakeEffectContext();
+	ContextHandle.AddSourceObject(this);
+
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(EffectClass, 1.f, ContextHandle);
+	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
+	{
+		return;
+	}
+	SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
 void ANexusCharacterBase::ApplyStunToTarget(ANexusCharacterBase* Target, float Duration)
 {
-	FGameplayEventData Payload;
-	Payload.Instigator = this;
-	Payload.Target = Target;
-	Payload.EventMagnitude = Duration;
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, FGameplayTag::RequestGameplayTag(FName("Event.Apply.Status.Stunned")), Payload);
+	if (!EffectSet)
+	{
+		return;
+	}
+
+	ApplySetByCallerEffectToTarget(
+		Target,
+		EffectSet->StunEffect,
+		Duration,
+		FGameplayTag::RequestGameplayTag(TEXT("Data.Value.Duration"))
+	);
+}
+
+void ANexusCharacterBase::ApplyDamageToTarget(ANexusCharacterBase* Target, float Damage)
+{
+	if (!EffectSet || !IsValid(Target))
+	{
+		return;
+	}
+
+	if (Damage <= 0.f)
+	{
+		return;
+	}
+	Damage = Damage * -1;
+
+	ApplySetByCallerEffectToTarget(
+		Target,
+		EffectSet->DamageEffect,
+		Damage,
+		FGameplayTag::RequestGameplayTag(TEXT("Data.Value.Damage"))
+	);
 }
 
 void ANexusCharacterBase::SetTeamID(ENexusTeamID NewTeamID)
@@ -491,19 +561,19 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 
 		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
 
-		if (AbilityCDO->InputTag.IsValid())
+		if (AbilityCDO->AbilityTagConfig.InputTag.IsValid())
 		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->InputTag);
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.InputTag);
 		}
 
-		if (AbilityCDO->AbilityTag.IsValid())
+		if (AbilityCDO->AbilityTagConfig.AbilityTag.IsValid())
 		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTag);
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.AbilityTag);
 		}
 
-		if (AbilityCDO->WeaponTag.IsValid())
+		if (AbilityCDO->AbilityTagConfig.WeaponTag.IsValid())
 		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->WeaponTag);
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.WeaponTag);
 		}
 
 		const FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(Spec);

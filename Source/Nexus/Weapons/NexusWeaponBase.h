@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "NexusWeaponBase.generated.h"
 
+class ANexusPlayerCharacter;
 class UNexusGameplayAbility;
 class ANexusWeaponBase;
 class ANexusCharacterBase;

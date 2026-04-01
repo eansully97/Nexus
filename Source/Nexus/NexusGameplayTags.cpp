@@ -7,11 +7,9 @@ namespace NexusGameplayTags
 	// -------------------------
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Reactive_Parry, "Ability.Reactive.Parry");
 	
-	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_EnemyBasicAttack, "Ability.Enemy.EnemyBasicAttack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Movement_Dash, "Ability.Movement.Dash");
-	
-	UE_DEFINE_GAMEPLAY_TAG(Ability_Projectile_Spawn, "Ability.Projectile.Spawn");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Swing, "Ability.Weapon.Axe.Swing");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Block, "Ability.Weapon.Axe.Block");
@@ -25,6 +23,7 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Cooldown
 	// -------------------------
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Enemy_Attack, "Cooldown.Enemy.Attack");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Ability_Dash, "Cooldown.Ability.Dash");
 	
@@ -48,10 +47,10 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Event
 	// -------------------------
-	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Changed, "Event.Ability.Changed");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Updated, "Event.Ability.Updated");
 	
-	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Dash, "Event.Ability.Dash");
-	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Parry, "Event.Ability.Parry");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Dash_Avtivated, "Event.Ability.Dash.Activated");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Parry_Activated, "Event.Ability.Parry.Activated");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Impact, "Event.Ability.ShadowStrike.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Activated, "Event.Ability.ShadowStrike.Activated");
@@ -63,10 +62,6 @@ namespace NexusGameplayTags
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Explode, "Event.Projectile.Explode");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Spawn, "Event.Projectile.Spawn");
-	
-	UE_DEFINE_GAMEPLAY_TAG(Event_Apply_Status_Stunned, "Event.Apply.Status.Stunned");
-	
-	UE_DEFINE_GAMEPLAY_TAG(Event_Weapon_Equip, "Event.Weapon.Equip");
 
 	// -------------------------
 	// GameplayCue

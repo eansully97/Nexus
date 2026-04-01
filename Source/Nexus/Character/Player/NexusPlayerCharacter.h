@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "InputActionValue.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "NexusPlayerCharacter.generated.h"
 
@@ -39,6 +40,9 @@ protected:
 
 	const FGameplayAbilitySpec* FindAbilitySpecByInputTag(FGameplayTag InputTag) const;
 	bool TrySendAbilityGameplayEvent(FGameplayTag InputTag);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SendAbilityTargetedEvent(FGameplayTag InputTag, AActor* TargetActor);
 
 	UFUNCTION(Server, Reliable)
 	void Server_SetPitch(float InPitch);

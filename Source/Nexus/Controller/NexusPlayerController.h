@@ -71,7 +71,7 @@ private:
 	TObjectPtr<ANexusCharacterBase> CurrentTargetedCharacter = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta = (AllowPrivateAccess = "true"))
-	bool bHasValidShadowStrikeTarget = false;
+	bool bHasValidTarget = false;
 
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UUserWidget> ClassSelectWidgetClass;
@@ -90,7 +90,7 @@ public:
 	ANexusCharacterBase* GetCurrentTargetedCharacter() const { return CurrentTargetedCharacter; }
 
 	UFUNCTION(BlueprintPure, Category="Crosshair")
-	bool HasValidTarget() const { return bHasValidShadowStrikeTarget; }
+	bool HasValidTarget() const { return bHasValidTarget; }
 
 	UFUNCTION(BlueprintPure, Category="Targeting")
 	bool IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const;

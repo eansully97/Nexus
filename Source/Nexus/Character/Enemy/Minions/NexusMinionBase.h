@@ -16,11 +16,33 @@ public:
 	ANexusMinionBase();
 
 	UFUNCTION(BlueprintCallable)
+	void StartHitscan();
+
+	UFUNCTION(BlueprintCallable)
+	void EndHitscan();
+
+	void Hitscan();
+	void DoHitscan();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ANexusCharacterBase>> AlreadyHitCharactersInWindow;
+
+	FTimerHandle HitscanTimerHandle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	float DamageHitScanRadius = 30.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	float DamageToDeal = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	float HitscanInterval = 0.03f;
+
+	UFUNCTION(BlueprintCallable)
 	void InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID);
 
 	UFUNCTION(BlueprintCallable)
 	void HandleReachedCapturePoint(ANexusCapturePoint* CapturePoint);
-
 
 protected:
 	virtual void BeginPlay() override;
@@ -29,9 +51,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Objective")
 	ANexusCapturePoint* TargetCapturePoint = nullptr;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float AggroRange = 500;
+	float AggroRange = 500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
 	float DefendLeashRadius = 685.f;
@@ -49,7 +71,7 @@ protected:
 	TObjectPtr<USkeletalMesh> TeamBMesh = nullptr;
 
 	FTimerHandle TargetScanTimerHandle;
-	bool bAtCapturePoint;
+	bool bAtCapturePoint = false;
 
 	void StartTargetScan();
 	void StopTargetScan();

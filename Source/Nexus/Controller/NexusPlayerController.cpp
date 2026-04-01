@@ -170,7 +170,7 @@ FHitResult ANexusPlayerController::GetCurrentCrosshairHit()
 void ANexusPlayerController::UpdateTargetedCharacter()
 {
 	CurrentTargetedCharacter = nullptr;
-	bHasValidShadowStrikeTarget = false;
+	bHasValidTarget = false;
 
 	ANexusPlayerCharacter* SourceCharacter = Cast<ANexusPlayerCharacter>(GetPawn());
 	if (!IsValid(SourceCharacter))
@@ -192,7 +192,7 @@ void ANexusPlayerController::UpdateTargetedCharacter()
 	}
 
 	CurrentTargetedCharacter = TargetCharacter;
-	bHasValidShadowStrikeTarget = true;
+	bHasValidTarget = true;
 }
 
 bool ANexusPlayerController::IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter,

@@ -3,11 +3,12 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
-#include "InputActionValue.h"
+
 #include "GameFramework/Character.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "NexusCharacterBase.generated.h"
 
+class UNexusEffectSet;
 class UNexusAbilitySystemComponent;
 class UAbilitySystemComponent;
 class UBasicAttributeSet;
@@ -35,7 +36,11 @@ public:
 	ANexusCharacterBase();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
 	bool ShouldBlockNativeInput() const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TObjectPtr<UNexusEffectSet> EffectSet;
 
 protected:
 	virtual void BeginPlay() override;
@@ -43,23 +48,6 @@ protected:
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	// Ability Helper Functions
-	UFUNCTION(BlueprintCallable)
-	TArray<ANexusCharacterBase*> PerformSphereTraceForValidEnemies(const FVector& StartLocation, const FVector& EndLocation, float Radius);
-	
-	UFUNCTION(BlueprintCallable)
-	void ApplyGameplayEffectSpecsToTarget(
-	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
-	ANexusCharacterBase* TargetToEffect);
-
-	UFUNCTION(BlueprintCallable)
-	void ApplyGameplayEffectSpecsToTargets(
-	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
-	const TArray<ANexusCharacterBase*>& Targets);
-
-	UFUNCTION(BlueprintCallable)
-	void ApplyStunToTarget(ANexusCharacterBase* Target, float Duration);
 	
 
 	// --- Replicated shared combat state ---
@@ -181,6 +169,37 @@ protected:
 public:
 	UPROPERTY(BlueprintAssignable, Category="Events")
 	FOnCombatStateChanged OnCombatStateChanged;
+
+	// Ability Helper Functions
+	UFUNCTION(BlueprintCallable)
+	TArray<ANexusCharacterBase*> PerformSphereTraceForValidEnemies(
+		const FVector& StartLocation,
+		const FVector& EndLocation,
+		float Radius,
+		TArray<FHitResult>& OutValidHitResults);
+	
+	UFUNCTION(BlueprintCallable)
+	void ApplyGameplayEffectSpecsToTarget(
+		const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+		ANexusCharacterBase* TargetToEffect);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplyGameplayEffectSpecsToTargets(
+		const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+		const TArray<ANexusCharacterBase*>& Targets);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplySetByCallerEffectToTarget(ANexusCharacterBase* Target,
+		TSubclassOf<UGameplayEffect> EffectClass,
+		float Magnitude, FGameplayTag DataTag);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplyStunToTarget(ANexusCharacterBase* Target,
+		float Duration);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplyDamageToTarget(ANexusCharacterBase* Target,
+		float Damage);
 
 	UFUNCTION(BlueprintPure)
 	bool GetIsDead() const { return bIsDead; }

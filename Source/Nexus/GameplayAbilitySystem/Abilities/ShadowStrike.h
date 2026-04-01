@@ -45,10 +45,13 @@ protected:
 	float MaxRange = 2000.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
-	float TeleportDistanceBehindTarget = 100.f;
+	float TeleportDistanceBehindTarget = 85.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
 	float SideOffset = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
+	float StunDuration = 0.6f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
 	bool bStopTargetMovement = true;

@@ -191,8 +191,7 @@ bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
 		return false;
 	}
 
-	FGameplayEventData Payload;
-	Payload.Instigator = this;
+	AActor* TargetActor = nullptr;
 
 	if (AbilityCDO->bRequiresValidTarget)
 	{
@@ -202,20 +201,41 @@ bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
 			return true;
 		}
 
-		Payload.Target = PC->GetCurrentTargetedCharacter();
+		TargetActor = PC->GetCurrentTargetedCharacter();
 	}
 
-	if (!AbilityCDO->ActivationEventTag.IsValid())
+	Server_SendAbilityTargetedEvent(InputTag, TargetActor);
+	return true;
+}
+
+void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(FGameplayTag InputTag, AActor* TargetActor)
+{
+	if (!AbilitySystemComponent)
 	{
-		return true;
+		return;
 	}
+
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputTag(InputTag);
+	if (!Spec)
+	{
+		return;
+	}
+
+	const UNexusGameplayAbility* AbilityCDO = Cast<UNexusGameplayAbility>(Spec->Ability);
+	if (!AbilityCDO || !AbilityCDO->bActivateByEvent)
+	{
+		return;
+	}
+
+	FGameplayEventData Payload;
+	Payload.Instigator = this;
+	Payload.Target = TargetActor;
+	Payload.EventMagnitude = AbilityCDO->Damage * -1;
 
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this,
-		AbilityCDO->ActivationEventTag,
+		AbilityCDO->AbilityTagConfig.ActivationEventTag,
 		Payload);
-
-	return true;
 }
 
 const FGameplayAbilitySpec* ANexusPlayerCharacter::FindAbilitySpecByInputTag(FGameplayTag InputTag) const

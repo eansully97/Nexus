@@ -33,6 +33,9 @@ class NEXUS_API ANexusPlayerState : public APlayerState
 public:
 	ANexusPlayerState();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<TSubclassOf<UNexusGameplayAbility>> BaseAbilities;
+
 protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

@@ -15,13 +15,12 @@ class NEXUS_API UNexusAbilitySystemComponent : public UAbilitySystemComponent
 public:
 	UNexusAbilitySystemComponent();
 
+	void AbilityInputTagPressed(const FGameplayTag& InputTag);
+	void AbilityInputTagReleased(const FGameplayTag& InputTag);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnRep_ActivateAbilities() override;
 	
 	TArray<FGameplayAbilitySpec> LastActivatedAbilitySpecs;
-	
-public:
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-	                           FActorComponentTickFunction* ThisTickFunction) override;
 };

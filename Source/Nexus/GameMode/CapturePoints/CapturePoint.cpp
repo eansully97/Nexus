@@ -236,14 +236,7 @@ void ANexusCapturePoint::OnCaptureAreaEndOverlap(
 	if (Unit)
 	{
 		UnregisterCombatUnit(Unit);
-		if (ANexusMinionBase* Minion = Cast<ANexusMinionBase>(Unit))
-		{
-			Minion->HandleLeftCapturePoint(this);
-		}
-		else
-		{
-			Unit->SetCurrentCapturePoint(nullptr);
-		}
+		Unit->SetCurrentCapturePoint(nullptr);
 	}
 }
 

@@ -7,6 +7,7 @@
 #include "Camera/CameraActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Nexus/Character/Player/NexusPlayerCharacter.h"
 #include "Nexus/GameMode/NexusGameMode.h"
 #include "Nexus/GameState/NexusGameState.h"
 #include "Nexus/HUD/NexusHUD.h"
@@ -77,6 +78,7 @@ void ANexusPlayerController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	GetCrosshairHitResult(CurrentCrosshairHit, 10000.f);
+	UpdateTargetedCharacter();
 }
 
 void ANexusPlayerController::OnRep_PlayerState()
@@ -163,6 +165,60 @@ bool ANexusPlayerController::GetCrosshairHitResult(FHitResult& OutHit, float Tra
 FHitResult ANexusPlayerController::GetCurrentCrosshairHit()
 {
 	return CurrentCrosshairHit;
+}
+
+void ANexusPlayerController::UpdateTargetedCharacter()
+{
+	CurrentTargetedCharacter = nullptr;
+	bHasValidShadowStrikeTarget = false;
+
+	ANexusPlayerCharacter* SourceCharacter = Cast<ANexusPlayerCharacter>(GetPawn());
+	if (!IsValid(SourceCharacter))
+	{
+		return;
+	}
+
+	AActor* HitActor = CurrentCrosshairHit.GetActor();
+	ANexusCharacterBase* TargetCharacter = Cast<ANexusCharacterBase>(HitActor);
+
+	if (!IsValid(TargetCharacter) && IsValid(HitActor))
+	{
+		TargetCharacter = Cast<ANexusCharacterBase>(HitActor->GetOwner());
+	}
+
+	if (!IsValidTargetCharacter(SourceCharacter, TargetCharacter))
+	{
+		return;
+	}
+
+	CurrentTargetedCharacter = TargetCharacter;
+	bHasValidShadowStrikeTarget = true;
+}
+
+bool ANexusPlayerController::IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter,
+	ANexusCharacterBase* TargetCharacter) const
+{
+	if (!IsValid(SourceCharacter) || !IsValid(TargetCharacter))
+	{
+		return false;
+	}
+
+	if (SourceCharacter == TargetCharacter)
+	{
+		return false;
+	}
+
+	if (SourceCharacter->GetTeamID() == TargetCharacter->GetTeamID())
+	{
+		return false;
+	}
+
+	if (TargetCharacter->GetIsDead())
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void ANexusPlayerController::ShowWaitingCameraForTeam()

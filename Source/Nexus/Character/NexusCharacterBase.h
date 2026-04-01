@@ -3,15 +3,18 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "InputActionValue.h"
 #include "GameFramework/Character.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "NexusCharacterBase.generated.h"
 
+class UNexusAbilitySystemComponent;
 class UAbilitySystemComponent;
 class UBasicAttributeSet;
 class UNexusGameplayAbility;
 class ANexusCapturePoint;
 class ANexusPlayerState;
+
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCombatStateChanged);
 
@@ -32,6 +35,7 @@ public:
 	ANexusCharacterBase();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	bool ShouldBlockNativeInput() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -40,6 +44,22 @@ protected:
 	virtual void OnRep_PlayerState() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// Ability Helper Functions
+	UFUNCTION(BlueprintCallable)
+	TArray<ANexusCharacterBase*> PerformSphereTraceForValidEnemies(const FVector& StartLocation, const FVector& EndLocation, float Radius);
+	
+	UFUNCTION(BlueprintCallable)
+	void ApplyGameplayEffectSpecsToTarget(
+	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+	ANexusCharacterBase* TargetToEffect);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplyGameplayEffectSpecsToTargets(
+	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+	const TArray<ANexusCharacterBase*>& Targets);
+
+	UFUNCTION(BlueprintCallable)
+	void ApplyStunToTarget(ANexusCharacterBase* Target, float Duration);
 	
 
 	// --- Replicated shared combat state ---
@@ -55,7 +75,7 @@ protected:
 
 	// --- GAS ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
-	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	TObjectPtr<UNexusAbilitySystemComponent> AbilitySystemComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
 	TObjectPtr<UBasicAttributeSet> BasicAttributeSet;
@@ -69,6 +89,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> DeathMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
+	TObjectPtr<UAnimMontage> StunMontage = nullptr;
 
 	// Runtime tracking by source.
 	TArray<FGameplayAbilitySpecHandle> BaseAbilityHandles;
@@ -88,6 +111,7 @@ protected:
 	// Shared handlers called by both authority and rep-notify.
 	virtual void HandleTeamChanged();
 	virtual void HandleDeathStateChanged();
+	
 	virtual void HandleCurrentCapturePointChanged();
 
 	// Shared GAS init
@@ -126,6 +150,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category="State")
 	void BP_OnDeathStarted();
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_DeathAnimation();
+
+	void PlayDeathAnimation();
+
 	virtual void ApplyDeathState_Server();
 	virtual void ApplyDeathPresentation();
 
@@ -147,10 +176,12 @@ public:
 protected:
 	TArray<FGameplayAbilitySpecHandle>& GetHandleArrayForSource(ENexusAbilitySource Source);
 	bool HasGrantedAbilityClass(TSubclassOf<UNexusGameplayAbility> AbilityClass) const;
+	bool HasGrantedAbilityTag(const FGameplayTag& AbilityTag) const;
 
 public:
 	UPROPERTY(BlueprintAssignable, Category="Events")
 	FOnCombatStateChanged OnCombatStateChanged;
 
-	FORCEINLINE bool GetIsDead() const { return bIsDead; }
+	UFUNCTION(BlueprintPure)
+	bool GetIsDead() const { return bIsDead; }
 };

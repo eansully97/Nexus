@@ -12,7 +12,13 @@ ANexusWeaponBase::ANexusWeaponBase()
 	bReplicates = true;
 	AActor::SetReplicateMovement(true);
 
+	SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
+	SetRootComponent(SceneComponent);
+
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SetRootComponent(WeaponMesh);
+	
+
+	OffHandWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OffHandWeaponMesh"));
+	OffHandWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }

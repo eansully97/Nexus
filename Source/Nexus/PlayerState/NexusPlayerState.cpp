@@ -177,6 +177,10 @@ void ANexusPlayerState::ApplyPersistentCombatProfileToCharacter(ANexusCharacterB
 
 		Character->GrantAbilitySet(ENexusAbilitySource::Class, ClassAbilities);
 		Character->GrantAbilitySet(ENexusAbilitySource::Weapon, WeaponAbilities);
+		if (BaseAbilities.Num() > 0)
+		{
+			Character->GrantAbilitySet(ENexusAbilitySource::Base, BaseAbilities);
+		}
 
 		if (PersistentLooseTags.Num() > 0)
 		{

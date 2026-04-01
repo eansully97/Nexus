@@ -21,8 +21,6 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void HandleReachedCapturePoint(ANexusCapturePoint* CapturePoint);
 
-	UFUNCTION(BlueprintCallable)
-	void HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint);
 
 protected:
 	virtual void BeginPlay() override;
@@ -33,10 +31,10 @@ protected:
 	ANexusCapturePoint* TargetCapturePoint = nullptr;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float AggroRange = 650.f;
+	float AggroRange = 500;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
-	float DefendLeashRadius = 900.f;
+	float DefendLeashRadius = 685.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
 	float CapturePointPriorityBonus = 10000.f;
@@ -51,6 +49,7 @@ protected:
 	TObjectPtr<USkeletalMesh> TeamBMesh = nullptr;
 
 	FTimerHandle TargetScanTimerHandle;
+	bool bAtCapturePoint;
 
 	void StartTargetScan();
 	void StopTargetScan();

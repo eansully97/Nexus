@@ -5,6 +5,7 @@
 #include "Components/TextBlock.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
+#include "Nexus/Controller/NexusPlayerController.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
@@ -16,6 +17,7 @@ void UNexusAbilityEntryWidget::NativeDestruct()
 	{
 		World->GetTimerManager().ClearTimer(CooldownTimerHandle);
 		World->GetTimerManager().ClearTimer(ActiveStateTimerHandle);
+		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
 
 	Super::NativeDestruct();
@@ -107,6 +109,7 @@ void UNexusAbilityEntryWidget::BindListeners()
 {
 	BindCooldownListeners();
 	UpdateAbilityActiveState();
+	
 
 	if (UWorld* World = GetWorld())
 	{
@@ -120,6 +123,20 @@ void UNexusAbilityEntryWidget::BindListeners()
 				true
 			);
 		}
+		if (ObservedAbility->bRequiresValidTarget)
+		{
+			UpdateTargetRequirementState();
+			if (!World->GetTimerManager().IsTimerActive(TargetStateTimerHandle))
+			{
+				World->GetTimerManager().SetTimer(
+					TargetStateTimerHandle,
+					this,
+					&UNexusAbilityEntryWidget::UpdateTargetRequirementState,
+					TargetStateRefreshRate,
+					true
+				);
+			}
+		}
 	}
 }
 
@@ -130,6 +147,7 @@ void UNexusAbilityEntryWidget::UnbindListeners()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ActiveStateTimerHandle);
+		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
 }
 
@@ -178,21 +196,24 @@ void UNexusAbilityEntryWidget::UpdateCooldownProgress()
 	{
 		return;
 	}
+	
 
 	const float TimeRemaining = ObservedAbility->GetCooldownTimeRemaining();
 	if (TimeRemaining > 0.f)
 	{
-		if (CooldownText)
+		if (!IsObservedAbilityActive())
 		{
-			CooldownText->SetVisibility(ESlateVisibility::Visible);
-			CooldownText->SetText(FText::AsNumber(FMath::CeilToInt(TimeRemaining)));
-		}
+			if (CooldownText)
+			{
+				CooldownText->SetVisibility(ESlateVisibility::Visible);
+				CooldownText->SetText(FText::AsNumber(FMath::CeilToInt(TimeRemaining)));
+			}
 
-		if (CooldownOverlay)
-		{
-			CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
+			if (CooldownOverlay)
+			{
+				CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
+			}
 		}
-
 		BP_UpdateCooldownVisuals(TimeRemaining);
 
 		if (UWorld* World = GetWorld())
@@ -236,6 +257,39 @@ bool UNexusAbilityEntryWidget::IsObservedAbilityActive() const
 	}
 	
 	return AbilitySpec->IsActive();
+}
+
+bool UNexusAbilityEntryWidget::DoesAbilityNeedValidTarget() const
+{
+	return ObservedAbility && ObservedAbility->bRequiresValidTarget;
+}
+
+bool UNexusAbilityEntryWidget::HasLocalValidTarget() const
+{
+	APawn* ObservedPawn = Cast<APawn>(ObservedActor);
+	if (!IsValid(ObservedPawn))
+	{
+		return false;
+	}
+
+	ANexusPlayerController* PC = Cast<ANexusPlayerController>(ObservedPawn->GetController());
+	if (!IsValid(PC))
+	{
+		return false;
+	}
+
+	return PC->HasValidTarget();
+}
+
+void UNexusAbilityEntryWidget::UpdateTargetRequirementState()
+{
+	if (!DoesAbilityNeedValidTarget())
+	{
+		BP_OnTargetRequirementChanged(true);
+		return;
+	}
+
+	BP_OnTargetRequirementChanged(HasLocalValidTarget());
 }
 
 void UNexusAbilityEntryWidget::UpdateAbilityActiveState()

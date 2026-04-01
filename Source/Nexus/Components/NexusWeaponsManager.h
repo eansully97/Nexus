@@ -44,6 +44,8 @@ protected:
 public:
 	UFUNCTION(BlueprintCallable)
 	void Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip);
-
+	
+	void ApplyEquippedWeaponState();
+	void AttachEquippedWeapon();
 	void SetEquippedWeaponProperties();
 };

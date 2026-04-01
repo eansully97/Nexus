@@ -29,6 +29,7 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Abilities")
 	TObjectPtr<AActor> ObservedActor = nullptr;
+	
 
 	FGameplayTagContainer ObservedCooldownTags;
 
@@ -90,4 +91,16 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Abilities")
 	void BP_OnCooldownFinished();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities")
+	float TargetStateRefreshRate = 0.05f;
+
+	FTimerHandle TargetStateTimerHandle;
+
+	void UpdateTargetRequirementState();
+	bool DoesAbilityNeedValidTarget() const;
+	bool HasLocalValidTarget() const;
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Abilities")
+	void BP_OnTargetRequirementChanged(bool bHasValidTarget);
 };

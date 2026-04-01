@@ -20,7 +20,29 @@ class NEXUS_API UNexusGameplayAbility : public UGameplayAbility
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityInfo")
 	UAbilityInfo* AbilityInfo;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
+	bool bRequiresValidTarget{false};
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
+	bool bActivateByEvent{false};
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Nexus|Tags")
+	FGameplayTag AbilityTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Nexus|Tags")
+	FGameplayTag ActivationEventTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Nexus|Tags")
+	FGameplayTag InputTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Nexus|Tags")
+	FGameplayTag CooldownTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Nexus|Tags")
+	FGameplayTag WeaponTag;
+
+public:
 	UFUNCTION(BlueprintCallable, Category="UI")
 	FText GetAbilityDisplayName() const;
 	

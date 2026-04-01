@@ -4,7 +4,9 @@
 #include "NexusWeaponsManager.h"
 
 #include "CharacterClassComponent.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
@@ -34,11 +36,64 @@ void UNexusWeaponsManager::GetLifetimeReplicatedProps(TArray<class FLifetimeProp
 
 void UNexusWeaponsManager::OnRep_EquippedWeapon()
 {
-	if (EquippedWeapon)
+	ApplyEquippedWeaponState();
+}
+
+void UNexusWeaponsManager::ApplyEquippedWeaponState()
+{
+	if (!OwnerCharacter)
 	{
-		SetEquippedWeaponProperties();
+		OwnerCharacter = Cast<ANexusPlayerCharacter>(GetOwner());
+	}
+
+	if (!OwnerCharacter || !EquippedWeapon)
+	{
+		return;
+	}
+
+	AttachEquippedWeapon();
+	SetEquippedWeaponProperties();
+}
+
+void UNexusWeaponsManager::AttachEquippedWeapon()
+{
+	if (!OwnerCharacter || !EquippedWeapon)
+	{
+		return;
+	}
+
+	const FWeaponConfig& WeaponConfig = EquippedWeapon->WeaponConfig;
+
+	if (EquippedWeapon->GetHasOffHandWeapon())
+	{
+		if (UStaticMeshComponent* OffHandMesh = EquippedWeapon->GetOffHandWeaponMesh())
+		{
+			OffHandMesh->AttachToComponent(
+				OwnerCharacter->GetMesh(),
+				FAttachmentTransformRules::SnapToTargetIncludingScale,
+				WeaponConfig.OffHandSocketName
+			);
+		}
+
+		if (UStaticMeshComponent* WeaponMesh = EquippedWeapon->GetWeaponMesh())
+		{
+			WeaponMesh->AttachToComponent(
+				OwnerCharacter->GetMesh(),
+				FAttachmentTransformRules::SnapToTargetIncludingScale,
+				WeaponConfig.WeaponSocketName
+			);
+		}
+	}
+	else
+	{
+		EquippedWeapon->AttachToComponent(
+			OwnerCharacter->GetMesh(),
+			FAttachmentTransformRules::SnapToTargetIncludingScale,
+			WeaponConfig.WeaponSocketName
+		);
 	}
 }
+
 
 void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip)
 {
@@ -59,11 +114,6 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 		return;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = Character;
-	SpawnParameters.Instigator = Character;
-	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
 	const FTransform SpawnTransform = Character->GetActorTransform();
 
 	ANexusWeaponBase* Weapon = World->SpawnActorDeferred<ANexusWeaponBase>(
@@ -79,22 +129,12 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 		return;
 	}
 
-	// Put any required initialization here before FinishSpawning.
 	Weapon->SetOwner(Character);
-
 	Weapon->FinishSpawning(SpawnTransform);
 
 	EquippedWeapon = Weapon;
 
-	FWeaponConfig WeaponConfig = Weapon->WeaponConfig;
-
-	EquippedWeapon->AttachToComponent(
-		Character->GetMesh(),
-		FAttachmentTransformRules::SnapToTargetIncludingScale,
-		WeaponConfig.SocketName
-	);
-
-	SetEquippedWeaponProperties();
+	ApplyEquippedWeaponState();
 }
 
 void UNexusWeaponsManager::SetEquippedWeaponProperties()

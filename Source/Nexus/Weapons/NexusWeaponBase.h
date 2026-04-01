@@ -19,13 +19,14 @@ struct FWeaponConfig
 	TArray<TSubclassOf<UNexusGameplayAbility>> AbilitiesToGrant;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
-	FName SocketName;
+	FName WeaponSocketName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons|Optional")
+	FName OffHandSocketName;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	TSubclassOf<UAnimInstance> AnimInstanceClass;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
-	FVector SocketOffset;
+
 };
 
 UCLASS()
@@ -35,17 +36,27 @@ class NEXUS_API ANexusWeaponBase : public AActor
 
 public:
 	ANexusWeaponBase();
+	
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	FWeaponConfig WeaponConfig;
 
 protected:
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	USceneComponent* SceneComponent;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* WeaponMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Optional")
+	UStaticMeshComponent* OffHandWeaponMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character")
 	ANexusCharacterBase* OwnerCharacter;
 
 public:
 	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
+	bool GetHasOffHandWeapon() const { return OffHandWeaponMesh->IsValidLowLevel(); }
+	UStaticMeshComponent* GetOffHandWeaponMesh() const { return OffHandWeaponMesh; }
 };

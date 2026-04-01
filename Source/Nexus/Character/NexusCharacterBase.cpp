@@ -2,9 +2,12 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AIController.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
@@ -108,6 +111,108 @@ void ANexusCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME(ThisClass, CurrentCapturePoint);
 }
 
+TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnemies(
+	const FVector& StartLocation,
+	const FVector& EndLocation,
+	float Radius)
+{
+	if (!GetWorld())
+	{
+		return {};
+	}
+
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this);
+
+	TArray<FHitResult> HitResults;
+
+	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
+
+	TArray<ANexusCharacterBase*> HitCharacters;
+
+	const bool bHit = UKismetSystemLibrary::SphereTraceMultiForObjects(
+		GetWorld(),
+		StartLocation,
+		EndLocation,
+		Radius,
+		ObjectTypes,
+		false,
+		ActorsToIgnore,
+		EDrawDebugTrace::None,
+		HitResults,
+		true
+	);
+
+	if (!bHit)
+	{
+		return HitCharacters;
+	}
+
+	for (const FHitResult& Hit : HitResults)
+	{
+		ANexusCharacterBase* HitCharacter = Cast<ANexusCharacterBase>(Hit.GetActor());
+		if (!IsValid(HitCharacter) || HitCharacter->GetIsDead())
+		{
+			continue;
+		}
+
+		if (HitCharacter->GetTeamID() == GetTeamID())
+		{
+			continue;
+		}
+
+		HitCharacters.AddUnique(HitCharacter);
+	}
+
+	return HitCharacters;
+}
+
+void ANexusCharacterBase::ApplyGameplayEffectSpecsToTarget(
+	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+	ANexusCharacterBase* TargetToEffect)
+{
+	if (!IsValid(TargetToEffect))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* TargetASC = TargetToEffect->GetAbilitySystemComponent();
+	if (!TargetASC)
+	{
+		return;
+	}
+
+	for (const FGameplayEffectSpecHandle& EffectSpecHandle : EffectSpecHandles)
+	{
+		if (!EffectSpecHandle.IsValid() || !EffectSpecHandle.Data.IsValid())
+		{
+			continue;
+		}
+
+		TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
+	}
+}
+
+void ANexusCharacterBase::ApplyGameplayEffectSpecsToTargets(
+	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
+	const TArray<ANexusCharacterBase*>& Targets)
+{
+	for (ANexusCharacterBase* Target : Targets)
+	{
+		ApplyGameplayEffectSpecsToTarget(EffectSpecHandles, Target);
+	}
+}
+
+void ANexusCharacterBase::ApplyStunToTarget(ANexusCharacterBase* Target, float Duration)
+{
+	FGameplayEventData Payload;
+	Payload.Instigator = this;
+	Payload.Target = Target;
+	Payload.EventMagnitude = Duration;
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, FGameplayTag::RequestGameplayTag(FName("Event.Apply.Status.Stunned")), Payload);
+}
+
 void ANexusCharacterBase::SetTeamID(ENexusTeamID NewTeamID)
 {
 	if (TeamID == NewTeamID)
@@ -184,18 +289,64 @@ void ANexusCharacterBase::Die()
 	}
 
 	bIsDead = true;
+
 	ApplyDeathState_Server();
+
+	// Fire the animation trigger once from the server
+	Multicast_DeathAnimation();
+
 	HandleDeathStateChanged();
 	ForceNetUpdate();
 }
 
+void ANexusCharacterBase::Multicast_DeathAnimation_Implementation()
+{
+	PlayDeathAnimation();
+}
+
+void ANexusCharacterBase::PlayDeathAnimation()
+{
+	if (!DeathMontage)
+	{
+		return;
+	}
+
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			AnimInstance->StopAllMontages(0.1f);
+			AnimInstance->Montage_Play(DeathMontage);
+		}
+	}
+}
+
 void ANexusCharacterBase::ApplyDeathState_Server()
 {
+	// Dead tag
 	if (AbilitySystemComponent)
 	{
-		FGameplayTagContainer StatusTags;
-		StatusTags.AddTag(FGameplayTag::RequestGameplayTag(TEXT("Status.Dead")));
-		UAbilitySystemBlueprintLibrary::AddGameplayTags(this, StatusTags, EGameplayTagReplicationState::TagOnly);
+		FGameplayTag DeadTag = FGameplayTag::RequestGameplayTag(TEXT("Status.Dead"));
+		AbilitySystemComponent->AddLooseGameplayTag(DeadTag);
+
+		// Stop active abilities immediately
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
+	// Stop movement right away
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->DisableMovement();
+		MoveComp->StopMovementImmediately();
+	}
+
+	// Stop attack timers on this actor
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	// Stop AI logic if this is AI-controlled
+	if (AAIController* AI = Cast<AAIController>(GetController()))
+	{
+		AI->StopMovement();
 	}
 }
 
@@ -210,15 +361,11 @@ void ANexusCharacterBase::HandleDeathStateChanged()
 	OnCombatStateChanged.Broadcast();
 }
 
+
 void ANexusCharacterBase::ApplyDeathPresentation()
 {
 	GetCharacterMovement()->DisableMovement();
 	GetCharacterMovement()->StopMovementImmediately();
-
-	if (DeathMontage)
-	{
-		PlayAnimMontage(DeathMontage);
-	}
 
 	GetCapsuleComponent()->SetCollisionObjectType(ECC_WorldStatic);
 	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -254,6 +401,7 @@ void ANexusCharacterBase::EnterRagdoll()
 		MeshComp->SetSimulatePhysics(true);
 		MeshComp->bBlendPhysics = true;
 	}
+	SetLifeSpan(4.f);
 }
 
 TArray<FGameplayAbilitySpecHandle>& ANexusCharacterBase::GetHandleArrayForSource(ENexusAbilitySource Source)
@@ -293,6 +441,28 @@ bool ANexusCharacterBase::HasGrantedAbilityClass(TSubclassOf<UNexusGameplayAbili
 	return false;
 }
 
+bool ANexusCharacterBase::HasGrantedAbilityTag(const FGameplayTag& AbilityTag) const
+{
+	if (!AbilitySystemComponent || !AbilityTag.IsValid())
+	{
+		return false;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> ExistingHandles;
+	AbilitySystemComponent->GetAllAbilities(ExistingHandles);
+
+	for (const FGameplayAbilitySpecHandle& Handle : ExistingHandles)
+	{
+		const FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromHandle(Handle);
+		if (Spec && Spec->GetDynamicSpecSourceTags().HasTagExact(AbilityTag))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 	ENexusAbilitySource Source,
 	const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant)
@@ -313,7 +483,29 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 			continue;
 		}
 
+		const UNexusGameplayAbility* AbilityCDO = AbilityClass->GetDefaultObject<UNexusGameplayAbility>();
+		if (!AbilityCDO)
+		{
+			continue;
+		}
+
 		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+
+		if (AbilityCDO->InputTag.IsValid())
+		{
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->InputTag);
+		}
+
+		if (AbilityCDO->AbilityTag.IsValid())
+		{
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTag);
+		}
+
+		if (AbilityCDO->WeaponTag.IsValid())
+		{
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->WeaponTag);
+		}
+
 		const FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(Spec);
 
 		if (Handle.IsValid())

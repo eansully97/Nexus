@@ -67,6 +67,12 @@ private:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category="Crosshair", meta = (AllowPrivateAccess = "true"))
 	FHitResult CurrentCrosshairHit;
 
+	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<ANexusCharacterBase> CurrentTargetedCharacter = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta = (AllowPrivateAccess = "true"))
+	bool bHasValidShadowStrikeTarget = false;
+
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UUserWidget> ClassSelectWidgetClass;
 
@@ -79,5 +85,17 @@ public:
 
 	UFUNCTION(BlueprintPure)
 	FHitResult GetCurrentCrosshairHit();
+
+	UFUNCTION(BlueprintPure, Category="Targeting")
+	ANexusCharacterBase* GetCurrentTargetedCharacter() const { return CurrentTargetedCharacter; }
+
+	UFUNCTION(BlueprintPure, Category="Crosshair")
+	bool HasValidTarget() const { return bHasValidShadowStrikeTarget; }
+
+	UFUNCTION(BlueprintPure, Category="Targeting")
+	bool IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const;
+	
+private:
+	void UpdateTargetedCharacter();
 
 };

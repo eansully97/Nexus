@@ -5,7 +5,6 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/GameMode/CapturePoints/CapturePoint.h"
-#include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
 ANexusMinionBase::ANexusMinionBase()
 {
@@ -59,36 +58,15 @@ void ANexusMinionBase::HandleReachedCapturePoint(ANexusCapturePoint* CapturePoin
 	{
 		return;
 	}
-
+	bAtCapturePoint = true;
 	SetCurrentCapturePoint(CapturePoint);
 
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
-		AI->StopMovement();
-
 		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
 		{
 			BB->SetValueAsBool(TEXT("AtCapturePoint"), true);
 			BB->SetValueAsObject(TEXT("CapturePoint"), CapturePoint);
-		}
-	}
-}
-
-void ANexusMinionBase::HandleLeftCapturePoint(ANexusCapturePoint* CapturePoint)
-{
-	if (!HasAuthority() || CapturePoint != GetCurrentCapturePoint())
-	{
-		return;
-	}
-
-	SetCurrentCapturePoint(nullptr);
-
-	if (AAIController* AI = Cast<AAIController>(GetController()))
-	{
-		if (UBlackboardComponent* BB = AI->GetBlackboardComponent())
-		{
-			BB->SetValueAsBool(TEXT("AtCapturePoint"), false);
-			BB->SetValueAsObject(TEXT("CapturePoint"), TargetCapturePoint);
 		}
 	}
 }
@@ -252,9 +230,35 @@ AActor* ANexusMinionBase::FindBestTarget() const
 	AActor* BestActor = nullptr;
 	float BestScore = -FLT_MAX;
 
+	const FVector Forward = GetActorForwardVector();
+
 	for (AActor* Actor : OverlappedActors)
 	{
 		ANexusCharacterBase* Candidate = Cast<ANexusCharacterBase>(Actor);
+		if (!Candidate)
+		{
+			continue;
+		}
+
+		// Direction to target (normalized)
+		FVector ToTarget = Candidate->GetActorLocation() - GetActorLocation();
+		ToTarget.Z = 0.f; // optional: ignore vertical difference (usually good for AI)
+
+		if (!ToTarget.Normalize())
+		{
+			continue;
+		}
+		if (!bAtCapturePoint)
+		{
+			const float Dot = FVector::DotProduct(Forward, ToTarget);
+
+			// 🔥 Only allow targets in front
+			if (Dot < 0.34f)
+			{
+				continue;
+			}
+		}
+
 		const float Score = ScoreTarget(Candidate);
 
 		if (Score > BestScore)

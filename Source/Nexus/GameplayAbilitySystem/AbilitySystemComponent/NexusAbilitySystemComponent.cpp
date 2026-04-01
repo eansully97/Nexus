@@ -1,5 +1,6 @@
 ﻿#include "NexusAbilitySystemComponent.h"
 
+#include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 
 UNexusAbilitySystemComponent::UNexusAbilitySystemComponent()
@@ -10,6 +11,58 @@ UNexusAbilitySystemComponent::UNexusAbilitySystemComponent()
 void UNexusAbilitySystemComponent::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void UNexusAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
+{
+	if (!InputTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayTagContainer OwnedTags;
+	GetOwnedGameplayTags(OwnedTags);
+
+	// Global hard stop
+	if (OwnedTags.HasTagExact(NexusGameplayTags::Status_Stunned))
+	{
+		return;
+	}
+
+	if (HasMatchingGameplayTag(NexusGameplayTags::Status_Ability_Active) &&
+		InputTag.MatchesTag(FGameplayTag::RequestGameplayTag(TEXT("Input.Weapon"))))
+	{
+		return;
+	}
+
+	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+	{
+		if (Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			AbilitySpecInputPressed(Spec);
+
+			if (!Spec.IsActive())
+			{
+				TryActivateAbility(Spec.Handle);
+			}
+		}
+	}
+}
+
+void UNexusAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
+{
+	if (!InputTag.IsValid())
+	{
+		return;
+	}
+
+	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+	{
+		if (Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			AbilitySpecInputReleased(Spec);
+		}
+	}
 }
 
 void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
@@ -54,12 +107,4 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 		LastActivatedAbilitySpecs = ActivatableAbilities.Items;
 		Character->OnCombatStateChanged.Broadcast();
 	}
-}
-
-void UNexusAbilitySystemComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }

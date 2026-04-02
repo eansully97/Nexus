@@ -30,9 +30,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
 	TSubclassOf<UAnimInstance> DefaultAnimInstanceClass;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
-	TArray<FGameplayAbilitySpecHandle> WeaponAbilities;
 	
 protected:
 	virtual void BeginPlay() override;

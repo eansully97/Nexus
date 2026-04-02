@@ -50,6 +50,8 @@ void ANexusPlayerCharacter::InitializeFromPlayerState()
 		WeaponsManager->Equip(
 			PS->GetCharacterClassInfo()->WeaponClassToEquip
 		);
+
+		PS->TryApplyPersistentCooldownsToCharacter(this);
 	}
 }
 
@@ -144,10 +146,31 @@ void ANexusPlayerCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimePro
 	DOREPLIFETIME(ThisClass, PitchOffset)
 }
 
-bool ANexusCharacterBase::ShouldBlockNativeInput() const
+bool ANexusPlayerCharacter::ShouldBlockNativeInput() const
 {
 	return AbilitySystemComponent &&
 		AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Ability_Active);
+}
+
+bool ANexusPlayerCharacter::CanAcceptGameplayInput() const
+{
+	if (bIsDead)
+	{
+		return false;
+	}
+
+	if (!AbilitySystemComponent)
+	{
+		return true;
+	}
+
+	if (AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Stunned) ||
+		AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Dead))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void ANexusPlayerCharacter::Input_AbilityPressed(FGameplayTag InputTag)
@@ -197,19 +220,37 @@ bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
 	if (AbilityCDO->bRequiresValidTarget)
 	{
 		ANexusPlayerController* PC = Cast<ANexusPlayerController>(GetController());
-		if (!IsValid(PC) || !PC->HasValidTarget())
+		if (!IsValid(PC))
 		{
+			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: no player controller"));
+			return true;
+		}
+
+		if (!PC->HasValidTarget())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: no valid target"));
 			return true;
 		}
 
 		TargetActor = PC->GetCurrentTargetedCharacter();
+
+		UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent Target=%s"),
+			*GetNameSafe(TargetActor));
+
+		if (!IsValid(TargetActor))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: targeted actor invalid"));
+			return true;
+		}
 	}
 
 	Server_SendAbilityTargetedEvent(InputTag, TargetActor);
 	return true;
 }
 
-void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(FGameplayTag InputTag, AActor* TargetActor)
+void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(
+	FGameplayTag InputTag,
+	AActor* TargetActor)
 {
 	if (!AbilitySystemComponent)
 	{
@@ -228,14 +269,21 @@ void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(FGame
 		return;
 	}
 
+	const FGameplayTag EventTag = AbilityCDO->GetPrimaryActivationEventTag();
+	if (!EventTag.IsValid())
+	{
+		return;
+	}
+
 	FGameplayEventData Payload;
+	Payload.EventTag = EventTag;
 	Payload.Instigator = this;
 	Payload.Target = TargetActor;
-	Payload.EventMagnitude = AbilityCDO->AbilityInfo->Damage;
+	Payload.OptionalObject = TargetActor;
 
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this,
-		AbilityCDO->AbilityTagConfig.ActivationEventTag,
+		EventTag,
 		Payload);
 }
 

@@ -62,6 +62,9 @@ protected:
 	TObjectPtr<UImage> CooldownOverlay = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly)
+	TObjectPtr<UImage> TargetRequiredOverlay = nullptr;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly)
 	TObjectPtr<UImage> CooldownBG = nullptr;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly)
@@ -72,6 +75,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities")
 	float ActiveStateRefreshRate = 0.05f;
+
+	UPROPERTY(BlueprintReadOnly, Category="Abilities")
+	bool bHasValidTargetForObservedAbility = true;
 
 	FTimerHandle CooldownTimerHandle;
 	FTimerHandle ActiveStateTimerHandle;

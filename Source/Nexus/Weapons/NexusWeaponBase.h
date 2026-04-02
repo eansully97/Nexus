@@ -58,6 +58,6 @@ protected:
 
 public:
 	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
-	bool GetHasOffHandWeapon() const { return OffHandWeaponMesh->IsValidLowLevel(); }
+	bool HasOffHandWeapon() const { return OffHandWeaponMesh->GetStaticMesh() != nullptr; }
 	UStaticMeshComponent* GetOffHandWeaponMesh() const { return OffHandWeaponMesh; }
 };

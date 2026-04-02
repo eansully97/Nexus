@@ -16,6 +16,10 @@ class NEXUS_API UCostAndCooldownConfig : public UDataAsset
 {
 	GENERATED_BODY()
 public:
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Cooldown")
+	FGameplayTag CooldownIdentityTag;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Cooldown")
 	TSubclassOf<UGameplayEffect> CooldownEffectClass;
 
@@ -33,7 +37,4 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Cost")
 	float CostAmount = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
-	FGameplayTagContainer ActivationOwnedTags;
 };

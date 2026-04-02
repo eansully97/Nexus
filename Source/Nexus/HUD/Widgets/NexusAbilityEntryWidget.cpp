@@ -149,6 +149,11 @@ void UNexusAbilityEntryWidget::UnbindListeners()
 		World->GetTimerManager().ClearTimer(ActiveStateTimerHandle);
 		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
+
+	if (TargetRequiredOverlay)
+	{
+		TargetRequiredOverlay->SetVisibility(ESlateVisibility::Hidden);
+	}
 }
 
 
@@ -186,6 +191,7 @@ void UNexusAbilityEntryWidget::RefreshFromAbility()
 	ResetCooldownVisuals();
 	UpdateCooldownProgress();
 	UpdateAbilityActiveState();
+	UpdateTargetRequirementState();
 
 	BP_OnAbilityInitialized();
 }
@@ -283,13 +289,23 @@ bool UNexusAbilityEntryWidget::HasLocalValidTarget() const
 
 void UNexusAbilityEntryWidget::UpdateTargetRequirementState()
 {
-	if (!DoesAbilityNeedValidTarget())
+	bool bHasValidTarget = true;
+
+	if (DoesAbilityNeedValidTarget())
 	{
-		BP_OnTargetRequirementChanged(true);
-		return;
+		bHasValidTarget = HasLocalValidTarget();
 	}
 
-	BP_OnTargetRequirementChanged(HasLocalValidTarget());
+	bHasValidTargetForObservedAbility = bHasValidTarget;
+
+	if (TargetRequiredOverlay)
+	{
+		TargetRequiredOverlay->SetVisibility(bHasValidTarget
+			? ESlateVisibility::Hidden
+			: ESlateVisibility::Visible);
+	}
+
+	BP_OnTargetRequirementChanged(bHasValidTarget);
 }
 
 void UNexusAbilityEntryWidget::UpdateAbilityActiveState()

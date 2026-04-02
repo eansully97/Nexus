@@ -8,30 +8,18 @@
 
 class UCostAndCooldownConfig;
 class UAbilityInfo;
-class UNexusAbilityConfig;
 class ANexusCharacterBase;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 
 USTRUCT(BlueprintType)
-struct FAbilityTagConfig
+struct FAbilityBindingConfig
 {
 	GENERATED_BODY()
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
-	FGameplayTag AbilityTag;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
-	FGameplayTag ActivationEventTag;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
 	FGameplayTag InputTag;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
-	FGameplayTag CooldownTag;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
-	FGameplayTag WeaponTag;
+	
 };
 
 UCLASS()
@@ -41,22 +29,27 @@ class NEXUS_API UNexusGameplayAbility : public UGameplayAbility
 
 public:
 	UNexusGameplayAbility();
-	
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	bool CommitAbilityWithSetByCaller(
+		float CooldownDuration = -1.f,
+		float CostAmount = -1.f);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
-	FAbilityTagConfig AbilityTagConfig;
-	
+	FAbilityBindingConfig AbilityBindConfig;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
-	TObjectPtr<UCostAndCooldownConfig> CostAndCooldownConfig; 
+	TObjectPtr<UCostAndCooldownConfig> CostAndCooldownConfig;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
 	bool bRequiresValidTarget = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
 	bool bActivateByEvent = false;
-	
+
 public:
 	UFUNCTION(BlueprintCallable, Category="UI")
 	FText GetAbilityDisplayName() const;
@@ -67,20 +60,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	ANexusCharacterBase* GetNexusCharacterFromActorInfo() const;
 
+	UFUNCTION(BlueprintPure, Category="Nexus|Ability")
+	FGameplayTag GetPrimaryActivationEventTag() const;
+
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	UAbilitySystemComponent* GetSourceAbilitySystemComponent() const;
 
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
-	void AddActivationOwnedTagsToSource() const;
-
-	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
-	void RemoveActivationOwnedTagsFromSource() const;
-
-	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	void ApplyCooldownSetByCaller(float InDuration = -1.f);
 
+	// Pass a positive logical cost here. The helper will convert it to a negative additive GE magnitude.
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	void ApplyCostSetByCaller(float InCostAmount = -1.f);
+	void RemoveActivationOwnedTagsFromSource() const;
 
 protected:
 	virtual void EndAbility(

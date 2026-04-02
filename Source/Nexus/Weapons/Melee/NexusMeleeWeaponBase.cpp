@@ -28,7 +28,6 @@ static bool CanWeaponIssueOwningClientRPC(const ANexusCharacterBase* OwnerCharac
 
 void ANexusMeleeWeaponBase::StartHitscan()
 {
-	UE_LOG(LogTemp, Warning, TEXT("StartHitscan %s Role=%d"), *GetName(), (int32)GetLocalRole());
 	if (HasAuthority())
 	{
 		StartHitscan_Internal();
@@ -111,7 +110,6 @@ void ANexusMeleeWeaponBase::EndHitscan_Internal()
 
 void ANexusMeleeWeaponBase::Hitscan()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Hitscan %s Role=%d"), *GetName(), (int32)GetLocalRole());
 	if (!HasAuthority())
 	{
 		return;
@@ -167,9 +165,6 @@ void ANexusMeleeWeaponBase::ProcessWeaponTrace(
 	const UStaticMeshComponent* MeshToTrace,
 	TArray<TObjectPtr<ANexusCharacterBase>>& AlreadyHitCharacters) const
 {
-	UE_LOG(LogTemp, Warning, TEXT("ProcessWeaponTrace Weapon=%s Owner=%s"),
-		*GetName(),
-		*GetNameSafe(OwnerCharacter));
 	if (!HasAuthority() || !IsValid(OwnerCharacter) || !IsValid(MeshToTrace))
 	{
 		return;
@@ -206,9 +201,7 @@ void ANexusMeleeWeaponBase::ProcessWeaponTrace(
 		}
 
 		AlreadyHitCharacters.Add(Character);
-		UE_LOG(LogTemp, Warning, TEXT("About to ResolveMeleeHit Attacker=%s Target=%s"),
-	*GetNameSafe(OwnerCharacter),
-	*GetNameSafe(Character));
+
 		OwnerCharacter->ResolveMeleeHit(Character, HitResult, DamageToDeal);
 	}
 }

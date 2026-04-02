@@ -1,8 +1,6 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "NexusGameplayAbility.h"
 
-
-// ReSharper disable CppExpressionWithoutSideEffects
-#include "NexusGameplayAbility.h"
+#include "AbilitySystemComponent.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
@@ -11,6 +9,22 @@
 UNexusGameplayAbility::UNexusGameplayAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+}
+
+bool UNexusGameplayAbility::CommitAbilityWithSetByCaller(
+	float CooldownDuration,
+	float CostAmount)
+{
+	if (!CommitCheck(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+	{
+		return false;
+	}
+
+	ApplyCostSetByCaller(CostAmount);
+	ApplyCooldownSetByCaller(CooldownDuration);
+
+	CommitExecute(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo);
+	return true;
 }
 
 FText UNexusGameplayAbility::GetAbilityDisplayName() const
@@ -28,35 +42,23 @@ ANexusCharacterBase* UNexusGameplayAbility::GetNexusCharacterFromActorInfo() con
 	return Cast<ANexusCharacterBase>(GetAvatarActorFromActorInfo());
 }
 
+FGameplayTag UNexusGameplayAbility::GetPrimaryActivationEventTag() const
+{
+	for (const FAbilityTriggerData& TriggerData : AbilityTriggers)
+	{
+		if (TriggerData.TriggerSource == EGameplayAbilityTriggerSource::GameplayEvent &&
+			TriggerData.TriggerTag.IsValid())
+		{
+			return TriggerData.TriggerTag;
+		}
+	}
+
+	return FGameplayTag();
+}
+
 UAbilitySystemComponent* UNexusGameplayAbility::GetSourceAbilitySystemComponent() const
 {
 	return GetAbilitySystemComponentFromActorInfo();
-}
-
-void UNexusGameplayAbility::AddActivationOwnedTagsToSource() const
-{
-	if (!CostAndCooldownConfig || CostAndCooldownConfig->ActivationOwnedTags.IsEmpty())
-	{
-		return;
-	}
-
-	if (UAbilitySystemComponent* ASC = GetSourceAbilitySystemComponent())
-	{
-		ASC->AddLooseGameplayTags(CostAndCooldownConfig->ActivationOwnedTags);
-	}
-}
-
-void UNexusGameplayAbility::RemoveActivationOwnedTagsFromSource() const
-{
-	if (!CostAndCooldownConfig || CostAndCooldownConfig->ActivationOwnedTags.IsEmpty())
-	{
-		return;
-	}
-
-	if (UAbilitySystemComponent* ASC = GetSourceAbilitySystemComponent())
-	{
-		ASC->RemoveLooseGameplayTags(CostAndCooldownConfig->ActivationOwnedTags);
-	}
 }
 
 bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
@@ -64,7 +66,12 @@ bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
 	const FGameplayTag& DataTag,
 	float Magnitude) const
 {
-	if (!EffectClass || !DataTag.IsValid() || !CurrentActorInfo || !CurrentActorInfo->AbilitySystemComponent.IsValid())
+	UAbilitySystemComponent* ASC = GetSourceAbilitySystemComponent();
+
+	if (!EffectClass ||
+		!DataTag.IsValid() ||
+		!FMath::IsFinite(Magnitude) ||
+		!ASC)
 	{
 		return false;
 	}
@@ -77,12 +84,7 @@ bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
 
 	SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
 
-	ApplyGameplayEffectSpecToOwner(
-		CurrentSpecHandle,
-		CurrentActorInfo,
-		CurrentActivationInfo,
-		SpecHandle);
-
+	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	return true;
 }
 
@@ -97,7 +99,7 @@ void UNexusGameplayAbility::ApplyCooldownSetByCaller(float InDuration)
 		? InDuration
 		: CostAndCooldownConfig->CooldownDuration;
 
-	if (FinalDuration < 0.f)
+	if (FinalDuration <= 0.f)
 	{
 		return;
 	}
@@ -115,16 +117,23 @@ void UNexusGameplayAbility::ApplyCostSetByCaller(float InCostAmount)
 		return;
 	}
 
-	const float FinalCost = InCostAmount >= 0.f
+	// Cost values are authored as positive logical values in the data asset.
+	// Convert to negative additive GE magnitude here.
+	const float LogicalCost = InCostAmount >= 0.f
 		? InCostAmount
-		: CostAndCooldownConfig->CostAmount * -1;
-	
-	
+		: CostAndCooldownConfig->CostAmount;
+
+	if (LogicalCost <= 0.f)
+	{
+		return;
+	}
+
 	ApplySetByCallerEffectToOwner(
 		CostAndCooldownConfig->CostEffectClass,
 		CostAndCooldownConfig->CostSetByCallerTag,
-		FinalCost);
+		-LogicalCost);
 }
+
 
 void UNexusGameplayAbility::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -133,7 +142,6 @@ void UNexusGameplayAbility::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	RemoveActivationOwnedTagsFromSource();
-
+	
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -25,6 +25,11 @@ public:
 	void Input_JumpPressed(const FInputActionValue& Value);
 	void Input_JumpReleased(const FInputActionValue& Value);
 
+	bool ShouldBlockNativeInput() const;
+	
+	UFUNCTION(BlueprintPure)
+	bool CanAcceptGameplayInput() const;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<class UInputMappingContext> DefaultMappingContext;
 

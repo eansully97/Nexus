@@ -44,8 +44,6 @@ public:
 	ANexusCharacterBase();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
-	
-	bool ShouldBlockNativeInput() const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
 	TObjectPtr<UNexusEffectSet> EffectSet;
@@ -55,6 +53,7 @@ protected:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
+	virtual void PostInitializeComponents() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 
@@ -119,11 +118,13 @@ protected:
 public:
 	// Parry
 	UFUNCTION(BlueprintCallable)
-	ENexusHitResolutionResult ResolveMeleeHit(
-		ANexusCharacterBase* Target,
-		const FHitResult& HitResult,
-		float Damage
+	bool SendParryGameplayEvent(
+		ANexusCharacterBase* Attacker,
+		const FHitResult& HitResult
 	);
+	
+	ENexusHitResolutionResult ResolveMeleeHit(ANexusCharacterBase* Target, const FHitResult& HitResult, float Damage);
+
 	void DebugLogGrantedAbilities(const FString& Context) const;
 
 	UFUNCTION(BlueprintCallable)
@@ -136,13 +137,7 @@ public:
 		ANexusCharacterBase* Attacker,
 		float MinDotThreshold = 0.2f
 	) const;
-
-	UFUNCTION(BlueprintCallable)
-	bool SendParryGameplayEvent(
-		ANexusCharacterBase* Attacker,
-		const FHitResult& HitResult
-	);
-
+// End Parry
 public:
 	// ---- Team ----
 	UFUNCTION(BlueprintCallable, Category="Team")
@@ -189,7 +184,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
 	TArray<FGameplayAbilitySpecHandle> GrantAbilitySet(
 		ENexusAbilitySource Source,
-		const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant);
+		const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant,
+		UObject* SourceObject = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category="AbilitySystem")
 	void ClearAbilitySet(ENexusAbilitySource Source);
@@ -213,7 +209,8 @@ public:
 		const FVector& EndLocation,
 		float Radius,
 		TArray<FHitResult>& OutValidHitResults);
-	
+	void RebuildCombatLoadoutFromPlayerState();
+
 	UFUNCTION(BlueprintCallable)
 	void ApplyGameplayEffectSpecsToTarget(
 		const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,

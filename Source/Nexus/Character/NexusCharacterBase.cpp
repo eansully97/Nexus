@@ -22,7 +22,6 @@ ANexusCharacterBase::ANexusCharacterBase()
 
 	AbilitySystemComponent = CreateDefaultSubobject<UNexusAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(AbilityReplicationMode);
 
 	BasicAttributeSet = CreateDefaultSubobject<UBasicAttributeSet>(TEXT("BasicAttributeSet"));
 
@@ -76,6 +75,16 @@ void ANexusCharacterBase::OnRep_PlayerState()
 
 	InitializeAbilityActorInfo();
 	InitializeFromPlayerState();
+}
+
+void ANexusCharacterBase::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->SetReplicationMode(AbilityReplicationMode);
+	}
 }
 
 void ANexusCharacterBase::InitializeAbilityActorInfo()
@@ -148,7 +157,7 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 		ObjectTypes,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::ForDuration,
+		EDrawDebugTrace::None,
 		RawHitResults,
 		true,
 		FLinearColor::Red,
@@ -182,6 +191,18 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 	}
 
 	return HitCharacters;
+}
+
+void ANexusCharacterBase::RebuildCombatLoadoutFromPlayerState()
+{
+	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	if (!HasAuthority() || !PS)
+	{
+		return;
+	}
+
+	ClearAbilitySet(ENexusAbilitySource::Class);
+	GrantAbilitySet(ENexusAbilitySource::Class, PS->GetClassAbilityList());
 }
 
 void ANexusCharacterBase::ApplyGameplayEffectSpecsToTarget(
@@ -344,6 +365,7 @@ bool ANexusCharacterBase::IsAttackWithinDeflectAngle(
 	const float Dot = FVector::DotProduct(DefenderForward, ToAttacker);
 	return Dot >= MinDotThreshold;
 }
+
 bool ANexusCharacterBase::SendParryGameplayEvent(
 	ANexusCharacterBase* Attacker,
 	const FHitResult& HitResult)
@@ -365,8 +387,9 @@ bool ANexusCharacterBase::SendParryGameplayEvent(
 	const int32 NumTriggered = AbilitySystemComponent->HandleGameplayEvent(ParryEventTag, &Payload);
 
 	UE_LOG(LogTemp, Warning,
-		TEXT("HandleGameplayEvent Defender=%s TriggeredAbilities=%d"),
-		*GetName(),
+		TEXT("HandleGameplayEvent Defender=%s Attacker=%s TriggeredAbilities=%d"),
+		*GetNameSafe(this),
+		*GetNameSafe(Attacker),
 		NumTriggered);
 
 	return NumTriggered > 0;
@@ -389,15 +412,14 @@ ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
 
 	if (Target->CanParryMeleeHit(this))
 	{
-		const bool bParryTriggered = Target->SendParryGameplayEvent(this, HitResult);
-		if (bParryTriggered)
+		if (Target->SendParryGameplayEvent(this, HitResult))
 		{
 			return ENexusHitResolutionResult::Parried;
 		}
 	}
-	
+
 	ApplyDamageToTarget(Target, Damage);
-	
+
 	FGameplayCueParameters Parameters;
 	Parameters.Location = HitResult.ImpactPoint;
 	Parameters.Normal = HitResult.ImpactNormal;
@@ -407,7 +429,7 @@ ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
 		Target,
 		NexusGameplayTags::GameplayCue_Damage_Burst,
 		Parameters);
-	
+
 	return ENexusHitResolutionResult::Damaged;
 }
 
@@ -616,7 +638,10 @@ void ANexusCharacterBase::ApplyDeathPresentation()
 	{
 		if (APlayerController* PC = Cast<APlayerController>(GetController()))
 		{
-			DisableInput(PC);
+			if (PC->GetPawn() == this)
+			{
+				DisableInput(PC);
+			}
 		}
 	}
 
@@ -699,7 +724,8 @@ bool ANexusCharacterBase::HasGrantedAbilityTag(const FGameplayTag& AbilityTag) c
 
 TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 	ENexusAbilitySource Source,
-	const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant)
+	const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant,
+	UObject* SourceObject)
 {
 	TArray<FGameplayAbilitySpecHandle> NewHandles;
 
@@ -723,21 +749,15 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 			continue;
 		}
 
-		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+		FGameplayAbilitySpec Spec(
+			AbilityClass,
+			1,
+			INDEX_NONE,
+			SourceObject ? SourceObject : this);
 
-		if (AbilityCDO->AbilityTagConfig.InputTag.IsValid())
+		if (AbilityCDO->AbilityBindConfig.InputTag.IsValid())
 		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.InputTag);
-		}
-
-		if (AbilityCDO->AbilityTagConfig.AbilityTag.IsValid())
-		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.AbilityTag);
-		}
-
-		if (AbilityCDO->AbilityTagConfig.WeaponTag.IsValid())
-		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityTagConfig.WeaponTag);
+			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityBindConfig.InputTag);
 		}
 
 		const FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(Spec);

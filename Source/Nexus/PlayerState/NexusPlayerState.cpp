@@ -2,10 +2,45 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/DataAssets/CostAndCooldownConfig.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
+
+namespace
+{
+	bool ApplySetByCallerEffectToASC(
+		UAbilitySystemComponent* ASC,
+		TSubclassOf<UGameplayEffect> EffectClass,
+		const FGameplayTag& DataTag,
+		float Magnitude,
+		UObject* SourceObject = nullptr,
+		float EffectLevel = 1.f)
+	{
+		if (!ASC || !EffectClass || !DataTag.IsValid() || !FMath::IsFinite(Magnitude))
+		{
+			return false;
+		}
+
+		FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
+		if (SourceObject)
+		{
+			ContextHandle.AddSourceObject(SourceObject);
+		}
+
+		FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(EffectClass, EffectLevel, ContextHandle);
+		if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
+		{
+			return false;
+		}
+
+		SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
+		ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		return true;
+	}
+}
 
 ANexusPlayerState::ANexusPlayerState()
 {
@@ -87,13 +122,12 @@ void ANexusPlayerState::HandleProfileChanged()
 
 TArray<TSubclassOf<UNexusGameplayAbility>> ANexusPlayerState::GetClassAbilityList() const
 {
-	TArray<TSubclassOf<UNexusGameplayAbility>> Result;
-	
-	 if (CharacterClassInfo)
-	 {
-	 	Result = CharacterClassInfo->StartingAbilities;
-	 }
-	return Result;
+	if (CharacterClassInfo)
+	{
+		return CharacterClassInfo->StartingAbilities;
+	}
+
+	return {};
 }
 
 TArray<TSubclassOf<UNexusGameplayAbility>> ANexusPlayerState::GetWeaponAbilityList() const
@@ -130,21 +164,55 @@ void ANexusPlayerState::CapturePersistentCombatStateFromCharacter(ANexusCharacte
 	PersistentCooldowns.Reset();
 	PersistentLooseTags.Reset();
 
-	// --- Cooldown snapshot stub ---
-	// The exact implementation depends on how your abilities expose cooldown tags.
-	// A practical version is:
-	// 1) iterate active gameplay effects
-	// 2) find effects with cooldown tags
-	// 3) store remaining time by tag
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	TMap<FGameplayTag, float> CooldownExpiryByTag;
 
-	// --- Optional loose-tag persistence stub ---
-	// Example policy:
-	// preserve only whitelisted tags across respawn
+	TArray<FGameplayAbilitySpecHandle> Handles;
+	ASC->GetAllAbilities(Handles);
+
+	for (const FGameplayAbilitySpecHandle& Handle : Handles)
+	{
+		const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		const UNexusGameplayAbility* AbilityCDO = Spec ? Cast<UNexusGameplayAbility>(Spec->Ability) : nullptr;
+		const UCostAndCooldownConfig* Config = AbilityCDO ? AbilityCDO->CostAndCooldownConfig : nullptr;
+
+		if (!Config || !AbilityCDO->CostAndCooldownConfig)
+		{
+			continue;
+		}
+
+		FGameplayTagContainer QueryTags;
+		QueryTags.AddTag(AbilityCDO->CostAndCooldownConfig->CooldownIdentityTag);
+
+		const TArray<float> RemainingTimes =
+			ASC->GetActiveEffectsTimeRemaining(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(QueryTags));
+
+		float LongestRemaining = 0.f;
+		for (const float RemainingTime : RemainingTimes)
+		{
+			LongestRemaining = FMath::Max(LongestRemaining, RemainingTime);
+		}
+
+		if (LongestRemaining <= 0.f)
+		{
+			continue;
+		}
+
+		float& SavedExpiry = CooldownExpiryByTag.FindOrAdd(Config->CooldownIdentityTag);
+		SavedExpiry = FMath::Max(SavedExpiry, Now + LongestRemaining);
+	}
+
+	for (const TPair<FGameplayTag, float>& Pair : CooldownExpiryByTag)
+	{
+		FNexusPersistentCooldown Entry;
+		Entry.CooldownTag = Pair.Key;
+		Entry.ExpireWorldTimeSeconds = Pair.Value;
+		PersistentCooldowns.Add(Entry);
+	}
 
 	FGameplayTagContainer OwnedTags;
 	ASC->GetOwnedGameplayTags(OwnedTags);
 
-	// Example whitelist pattern; replace with your real tags.
 	const FGameplayTag PersistentTagRoot = FGameplayTag::RequestGameplayTag(TEXT("Status.Persistent"), false);
 	if (PersistentTagRoot.IsValid())
 	{
@@ -158,39 +226,130 @@ void ANexusPlayerState::CapturePersistentCombatStateFromCharacter(ANexusCharacte
 	}
 }
 
+float ANexusPlayerState::GetRemainingPersistentCooldownTime(
+	const FNexusPersistentCooldown& PersistentCooldown) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 0.f;
+	}
+
+	return FMath::Max(0.f, PersistentCooldown.ExpireWorldTimeSeconds - World->GetTimeSeconds());
+}
+
+bool ANexusPlayerState::TryApplySinglePersistentCooldownToCharacter(
+	ANexusCharacterBase* Character,
+	const FNexusPersistentCooldown& PersistentCooldown) const
+{
+	if (!Character || !PersistentCooldown.CooldownTag.IsValid())
+	{
+		return true;
+	}
+
+	UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		return false;
+	}
+
+	const float RemainingTime = GetRemainingPersistentCooldownTime(PersistentCooldown);
+	if (RemainingTime <= 0.f)
+	{
+		return true;
+	}
+
+	// If it's already active, treat it as restored.
+	{
+		FGameplayTagContainer QueryTags;
+		QueryTags.AddTag(PersistentCooldown.CooldownTag);
+
+		const TArray<float> ExistingTimes =
+			ASC->GetActiveEffectsTimeRemaining(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(QueryTags));
+
+		for (const float ExistingTime : ExistingTimes)
+		{
+			if (ExistingTime > 0.f)
+			{
+				return true;
+			}
+		}
+	}
+
+	// Find a granted ability whose cooldown config matches this cooldown identity tag.
+	TArray<FGameplayAbilitySpecHandle> Handles;
+	ASC->GetAllAbilities(Handles);
+
+	for (const FGameplayAbilitySpecHandle& Handle : Handles)
+	{
+		const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		const UNexusGameplayAbility* AbilityCDO = Spec ? Cast<UNexusGameplayAbility>(Spec->Ability) : nullptr;
+		const UCostAndCooldownConfig* Config = AbilityCDO ? AbilityCDO->CostAndCooldownConfig : nullptr;
+
+		if (!Config ||
+			!Config->CooldownEffectClass ||
+			!Config->CooldownIdentityTag.IsValid() ||
+			!Config->CooldownSetByCallerTag.IsValid())
+		{
+			continue;
+		}
+
+		if (Config->CooldownIdentityTag != PersistentCooldown.CooldownTag)
+		{
+			continue;
+		}
+
+		return ApplySetByCallerEffectToASC(
+			ASC,
+			Config->CooldownEffectClass,
+			Config->CooldownSetByCallerTag,
+			RemainingTime,
+			Character);
+	}
+
+	// Matching ability not granted yet. Leave it pending.
+	return false;
+}
+
+void ANexusPlayerState::TryApplyPersistentCooldownsToCharacter(ANexusCharacterBase* Character)
+{
+	if (!HasAuthority() || !Character || PersistentCooldowns.IsEmpty())
+	{
+		return;
+	}
+
+	TArray<FNexusPersistentCooldown> StillPending;
+
+	for (const FNexusPersistentCooldown& PersistentCooldown : PersistentCooldowns)
+	{
+		if (!TryApplySinglePersistentCooldownToCharacter(Character, PersistentCooldown))
+		{
+			StillPending.Add(PersistentCooldown);
+		}
+	}
+
+	PersistentCooldowns = MoveTemp(StillPending);
+}
+
 void ANexusPlayerState::ApplyPersistentCombatProfileToCharacter(ANexusCharacterBase* Character)
 {
-	if (!Character)
+	if (!Character || !HasAuthority())
 	{
 		return;
 	}
 
 	Character->SetTeamID(TeamID);
+	Character->RebuildCombatLoadoutFromPlayerState();
 
-	if (HasAuthority())
+	if (PersistentLooseTags.Num() > 0)
 	{
-		Character->ClearAbilitySet(ENexusAbilitySource::Class);
-		Character->ClearAbilitySet(ENexusAbilitySource::Weapon);
-
-		const TArray<TSubclassOf<UNexusGameplayAbility>> ClassAbilities = GetClassAbilityList();
-		const TArray<TSubclassOf<UNexusGameplayAbility>> WeaponAbilities = GetWeaponAbilityList();
-
-		Character->GrantAbilitySet(ENexusAbilitySource::Class, ClassAbilities);
-		Character->GrantAbilitySet(ENexusAbilitySource::Weapon, WeaponAbilities);
-		if (BaseAbilities.Num() > 0)
-		{
-			Character->GrantAbilitySet(ENexusAbilitySource::Base, BaseAbilities);
-		}
-
-		if (PersistentLooseTags.Num() > 0)
-		{
-			UAbilitySystemBlueprintLibrary::AddGameplayTags(
-				Character,
-				PersistentLooseTags,
-				EGameplayTagReplicationState::TagOnly);
-		}
-
-		// TODO: Reapply cooldown gameplay effects from PersistentCooldowns.
-		// This depends on your cooldown GE strategy.
+		UAbilitySystemBlueprintLibrary::AddGameplayTags(
+			Character,
+			PersistentLooseTags,
+			EGameplayTagReplicationState::TagOnly);
 	}
+
+	// Restores class/base cooldowns now.
+	// Weapon cooldowns may still be pending until the weapon is actually equipped.
+	TryApplyPersistentCooldownsToCharacter(Character);
 }

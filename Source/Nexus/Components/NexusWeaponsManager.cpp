@@ -64,7 +64,19 @@ void UNexusWeaponsManager::AttachEquippedWeapon()
 
 	const FWeaponConfig& WeaponConfig = EquippedWeapon->WeaponConfig;
 
-	if (EquippedWeapon->GetHasOffHandWeapon())
+	if (UStaticMeshComponent* WeaponMesh = EquippedWeapon->GetWeaponMesh())
+	{
+		WeaponMesh->AttachToComponent(
+			OwnerCharacter->GetMesh(),
+			FAttachmentTransformRules::SnapToTargetIncludingScale,
+			WeaponConfig.WeaponSocketName
+		);
+
+		WeaponMesh->SetVisibility(true, true);
+		WeaponMesh->SetHiddenInGame(false, true);
+	}
+
+	if (EquippedWeapon->HasOffHandWeapon())
 	{
 		if (UStaticMeshComponent* OffHandMesh = EquippedWeapon->GetOffHandWeaponMesh())
 		{
@@ -73,24 +85,10 @@ void UNexusWeaponsManager::AttachEquippedWeapon()
 				FAttachmentTransformRules::SnapToTargetIncludingScale,
 				WeaponConfig.OffHandSocketName
 			);
-		}
 
-		if (UStaticMeshComponent* WeaponMesh = EquippedWeapon->GetWeaponMesh())
-		{
-			WeaponMesh->AttachToComponent(
-				OwnerCharacter->GetMesh(),
-				FAttachmentTransformRules::SnapToTargetIncludingScale,
-				WeaponConfig.WeaponSocketName
-			);
+			OffHandMesh->SetVisibility(true, true);
+			OffHandMesh->SetHiddenInGame(false, true);
 		}
-	}
-	else
-	{
-		EquippedWeapon->AttachToComponent(
-			OwnerCharacter->GetMesh(),
-			FAttachmentTransformRules::SnapToTargetIncludingScale,
-			WeaponConfig.WeaponSocketName
-		);
 	}
 }
 
@@ -133,8 +131,19 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 	Weapon->FinishSpawning(SpawnTransform);
 
 	EquippedWeapon = Weapon;
+	OwnerCharacter = Character;
 
 	ApplyEquippedWeaponState();
+
+	const TArray<FGameplayAbilitySpecHandle> GrantedHandles = Character->GrantAbilitySet(
+		ENexusAbilitySource::Weapon,
+		EquippedWeapon->WeaponConfig.AbilitiesToGrant,
+		EquippedWeapon);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("Equip Weapon=%s GrantedWeaponAbilities=%d"),
+		*GetNameSafe(EquippedWeapon),
+		GrantedHandles.Num());
 }
 
 void UNexusWeaponsManager::SetEquippedWeaponProperties()

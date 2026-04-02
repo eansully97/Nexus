@@ -2,10 +2,11 @@
 
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/Character/Player/NexusPlayerCharacter.h"
 
 UNexusAbilitySystemComponent::UNexusAbilitySystemComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UNexusAbilitySystemComponent::BeginPlay()
@@ -23,14 +24,8 @@ void UNexusAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& In
 	FGameplayTagContainer OwnedTags;
 	GetOwnedGameplayTags(OwnedTags);
 
-	// Global hard stop
-	if (OwnedTags.HasTagExact(NexusGameplayTags::Status_Stunned))
-	{
-		return;
-	}
-
-	if (HasMatchingGameplayTag(NexusGameplayTags::Status_Ability_Active) &&
-		InputTag.MatchesTag(FGameplayTag::RequestGameplayTag(TEXT("Input.Weapon"))))
+	const ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(GetOwner());
+	if (Character && !Character->CanAcceptGameplayInput())
 	{
 		return;
 	}
@@ -64,6 +59,8 @@ void UNexusAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& I
 		}
 	}
 }
+
+
 
 void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 {

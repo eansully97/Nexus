@@ -7,7 +7,6 @@
 #include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "NexusPlayerState.generated.h"
 
-class ANexusPlayerCharacter;
 class ANexusCharacterBase;
 class UNexusGameplayAbility;
 
@@ -21,8 +20,9 @@ struct FNexusPersistentCooldown
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FGameplayTag CooldownTag;
 
+	// Absolute server world time when this cooldown expires.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float RemainingTime = 0.f;
+	float ExpireWorldTimeSeconds = 0.f;
 };
 
 UCLASS()
@@ -48,7 +48,6 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_SelectionLockedIn, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
 	bool bSelectionLockedIn = false;
 
-	// Persisted across respawn.
 	UPROPERTY()
 	TArray<FNexusPersistentCooldown> PersistentCooldowns;
 
@@ -65,6 +64,12 @@ protected:
 	void OnRep_SelectionLockedIn();
 
 	void HandleProfileChanged();
+
+	float GetRemainingPersistentCooldownTime(const FNexusPersistentCooldown& PersistentCooldown) const;
+
+	bool TryApplySinglePersistentCooldownToCharacter(
+		ANexusCharacterBase* Character,
+		const FNexusPersistentCooldown& PersistentCooldown) const;
 
 public:
 	UFUNCTION(BlueprintCallable, Category="Profile")
@@ -85,11 +90,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Profile")
 	bool GetSelectionLockedIn() const { return bSelectionLockedIn; }
 
-	// --- Respawn persistence ---
 	void CapturePersistentCombatStateFromCharacter(ANexusCharacterBase* Character);
 	void ApplyPersistentCombatProfileToCharacter(ANexusCharacterBase* Character);
+	void TryApplyPersistentCooldownsToCharacter(ANexusCharacterBase* Character);
 
-	// Integration points for your data assets.
 	TArray<TSubclassOf<UNexusGameplayAbility>> GetClassAbilityList() const;
 	TArray<TSubclassOf<UNexusGameplayAbility>> GetWeaponAbilityList() const;
 

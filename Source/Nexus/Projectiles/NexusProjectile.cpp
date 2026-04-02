@@ -44,10 +44,12 @@ void ANexusProjectile::InitializeProjectile(
 	AActor* InSourceActor,
 	UAbilitySystemComponent* InSourceASC,
 	const FVector& InDirection,
-	float InSpeed)
+	float InSpeed,
+	float InDamage)
 {
 	SourceActor = InSourceActor;
 	SourceASC = InSourceASC;
+	Damage = InDamage;
 
 	ReplicatedInitialDirection = InDirection.GetSafeNormal();
 	ReplicatedInitialSpeed = InSpeed;

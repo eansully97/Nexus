@@ -35,7 +35,7 @@ UAbilitySystemComponent* UNexusGameplayAbility::GetSourceAbilitySystemComponent(
 
 void UNexusGameplayAbility::AddActivationOwnedTagsToSource() const
 {
-	if (!CostAndCooldownConfig)
+	if (!CostAndCooldownConfig || CostAndCooldownConfig->ActivationOwnedTags.IsEmpty())
 	{
 		return;
 	}
@@ -48,7 +48,7 @@ void UNexusGameplayAbility::AddActivationOwnedTagsToSource() const
 
 void UNexusGameplayAbility::RemoveActivationOwnedTagsFromSource() const
 {
-	if (!CostAndCooldownConfig)
+	if (!CostAndCooldownConfig || CostAndCooldownConfig->ActivationOwnedTags.IsEmpty())
 	{
 		return;
 	}
@@ -64,7 +64,7 @@ bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
 	const FGameplayTag& DataTag,
 	float Magnitude) const
 {
-	if (!EffectClass || !DataTag.IsValid())
+	if (!EffectClass || !DataTag.IsValid() || !CurrentActorInfo || !CurrentActorInfo->AbilitySystemComponent.IsValid())
 	{
 		return false;
 	}
@@ -93,8 +93,14 @@ void UNexusGameplayAbility::ApplyCooldownSetByCaller(float InDuration)
 		return;
 	}
 
-	const float FinalDuration = InDuration >= 0.f ? InDuration :
-		(CostAndCooldownConfig->CooldownDuration > 0.f ? CostAndCooldownConfig->CooldownDuration : CostAndCooldownConfig->CooldownDuration);
+	const float FinalDuration = InDuration >= 0.f
+		? InDuration
+		: CostAndCooldownConfig->CooldownDuration;
+
+	if (FinalDuration < 0.f)
+	{
+		return;
+	}
 
 	ApplySetByCallerEffectToOwner(
 		CostAndCooldownConfig->CooldownEffectClass,
@@ -109,9 +115,11 @@ void UNexusGameplayAbility::ApplyCostSetByCaller(float InCostAmount)
 		return;
 	}
 
-	const float FinalCost = InCostAmount >= 0.f ? InCostAmount :
-		(CostAndCooldownConfig->CostAmount != 0.f ? CostAndCooldownConfig->CostAmount : CostAndCooldownConfig->CostAmount);
-
+	const float FinalCost = InCostAmount >= 0.f
+		? InCostAmount
+		: CostAndCooldownConfig->CostAmount * -1;
+	
+	
 	ApplySetByCallerEffectToOwner(
 		CostAndCooldownConfig->CostEffectClass,
 		CostAndCooldownConfig->CostSetByCallerTag,

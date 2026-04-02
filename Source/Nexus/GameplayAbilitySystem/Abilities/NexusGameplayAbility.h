@@ -57,9 +57,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
 	bool bActivateByEvent = false;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float Damage = 1.f;
-	
 public:
 	UFUNCTION(BlueprintCallable, Category="UI")
 	FText GetAbilityDisplayName() const;

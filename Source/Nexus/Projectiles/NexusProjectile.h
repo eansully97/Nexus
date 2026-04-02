@@ -36,9 +36,11 @@ protected:
 
 	UPROPERTY(Replicated)
 	float ReplicatedInitialSpeed = 0.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
+	float Damage;
 
 	virtual void BeginPlay() override;
-
 
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -47,6 +49,7 @@ public:
 		AActor* InSourceActor,
 		UAbilitySystemComponent* InSourceASC,
 		const FVector& InDirection,
-		float InSpeed
+		float InSpeed,
+		float InDamage
 	);
 };

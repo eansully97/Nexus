@@ -12,7 +12,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Movement_Dash, "Ability.Movement.Dash");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Swing, "Ability.Weapon.Axe.Swing");
-	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Block, "Ability.Weapon.Axe.Block");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Deflect, "Ability.Weapon.Axe.Deflect");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Dagger_Slash, "Ability.Weapon.Dagger.Slash");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Dagger_ShadowStrike, "Ability.Weapon.Dagger.ShadowStrike");
@@ -28,7 +28,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Ability_Dash, "Cooldown.Ability.Dash");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe_Swing, "Cooldown.Weapon.Axe.Swing");
-	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe_Block, "Cooldown.Weapon.Axe.Block");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe_Deflect, "Cooldown.Weapon.Axe.Deflect");
 
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Dagger_Slash, "Cooldown.Weapon.Dagger.Slash");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Dagger_ShadowStrike, "Cooldown.Weapon.Dagger.ShadowStrike");
@@ -43,6 +43,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Value_Damage, "Data.Value.Damage");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Value_Heal, "Data.Value.Heal");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Value_Duration, "Data.Value.Duration");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Value_Stamina, "Data.Value.Stamina");
 
 	// -------------------------
 	// Event
@@ -50,7 +51,6 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Updated, "Event.Ability.Updated");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Dash_Avtivated, "Event.Ability.Dash.Activated");
-	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Parry_Activated, "Event.Ability.Parry.Activated");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Impact, "Event.Ability.ShadowStrike.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Activated, "Event.Ability.ShadowStrike.Activated");
@@ -63,10 +63,12 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Explode, "Event.Projectile.Explode");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Spawn, "Event.Projectile.Spawn");
 
+	UE_DEFINE_GAMEPLAY_TAG(Event_Parry_Activated, "Event.Parry.Activated");
+
 	// -------------------------
 	// GameplayCue
 	// -------------------------
-	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Damage_Blocked, "GameplayCue.Damage.Blocked");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Damage_Deflected, "GameplayCue.Damage.Deflected");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Damage_Burst, "GameplayCue.Damage.Burst");
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Heal_Burst, "GameplayCue.Heal.Burst");
@@ -95,7 +97,8 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Status_Stealth, "Status.Stealth");
 	UE_DEFINE_GAMEPLAY_TAG(Status_Stunned, "Status.Stunned");
 	
-	UE_DEFINE_GAMEPLAY_TAG(Status_Defense_Blocking, "Status.Defense.Blocking");
+	UE_DEFINE_GAMEPLAY_TAG(Status_Defense_Deflecting, "Status.Defense.Deflecting");
+	UE_DEFINE_GAMEPLAY_TAG(Status_Defense_DeflectWindow, "Status.Defense.DeflectWindow");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Status_Objective_Capturing, "Status.Objective.Capturing");
 	

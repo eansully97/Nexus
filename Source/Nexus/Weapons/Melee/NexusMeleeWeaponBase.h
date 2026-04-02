@@ -30,6 +30,14 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	UFUNCTION(Server, Reliable)
+	void ServerStartHitscan();
+
+	UFUNCTION(Server, Reliable)
+	void ServerEndHitscan();
+
+	void StartHitscan_Internal();
+	void EndHitscan_Internal();
 	void Hitscan();
 	void DoHitscan();
 

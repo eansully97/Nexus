@@ -10,6 +10,7 @@
 #include "Nexus/Components/NexusEnhancedInputComponent.h"
 #include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/Controller/NexusPlayerController.h"
+#include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/GameMode/NexusGameMode.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
@@ -230,7 +231,7 @@ void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(FGame
 	FGameplayEventData Payload;
 	Payload.Instigator = this;
 	Payload.Target = TargetActor;
-	Payload.EventMagnitude = AbilityCDO->Damage * -1;
+	Payload.EventMagnitude = AbilityCDO->AbilityInfo->Damage;
 
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this,

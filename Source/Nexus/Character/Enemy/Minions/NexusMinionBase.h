@@ -48,6 +48,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void InitializeCombatLoadout() override;
 	virtual void ApplyTeamVisuals() const override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Objective")
 	ANexusCapturePoint* TargetCapturePoint = nullptr;
@@ -61,7 +62,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
 	float CapturePointPriorityBonus = 10000.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI")
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentTarget, VisibleAnywhere, BlueprintReadOnly, Category="AI")
 	TObjectPtr<AActor> CurrentTarget = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Visual")
@@ -76,6 +77,9 @@ protected:
 	void StartTargetScan();
 	void StopTargetScan();
 	void UpdateTargetActor();
+
+	UFUNCTION()
+	void OnRep_CurrentTarget();
 
 	AActor* FindBestTarget() const;
 	float ScoreTarget(ANexusCharacterBase* Candidate) const;

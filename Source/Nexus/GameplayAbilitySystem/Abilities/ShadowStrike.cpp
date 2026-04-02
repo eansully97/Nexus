@@ -7,6 +7,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Controller/NexusPlayerController.h"
+#include "Nexus/DataAssets/AbilityInfo.h"
 
 UShadowStrike::UShadowStrike()
 {
@@ -51,12 +52,6 @@ void UShadowStrike::ActivateAbility(
 		return;
 	}
 
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
-	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
-	}
-
 	FVector TeleportLocation = FVector::ZeroVector;
 	FRotator TeleportRotation = FRotator::ZeroRotator;
 
@@ -65,7 +60,8 @@ void UShadowStrike::ActivateAbility(
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-
+	
+	ApplyCostSetByCaller();
 	TeleportAndFaceTarget(TeleportLocation);
 
 	if (bStopTargetMovement)
@@ -103,6 +99,7 @@ void UShadowStrike::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	ApplyCooldownSetByCaller();
 	Cleanup();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -145,24 +142,90 @@ bool UShadowStrike::IsInRange(ANexusCharacterBase* SourceCharacter, ANexusCharac
 
 bool UShadowStrike::FindTeleportLocation(FVector& OutLocation, FRotator& OutRotation) const
 {
-	if (!IsValid(CachedTargetCharacter))
+	if (!IsValid(CachedTargetCharacter) || !IsValid(GetAvatarActorFromActorInfo()))
 	{
 		return false;
 	}
 
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const FVector MyLocation = AvatarActor->GetActorLocation();
 	const FVector TargetLocation = CachedTargetCharacter->GetActorLocation();
-	const FVector TargetForward = CachedTargetCharacter->GetActorForwardVector();
-	const FVector TargetRight = CachedTargetCharacter->GetActorRightVector();
 
-	OutLocation = TargetLocation
-		- (TargetForward * TeleportDistanceBehindTarget)
-		+ (TargetRight * SideOffset);
+	// Direction from me -> target
+	FVector ToTarget = TargetLocation - MyLocation;
+	ToTarget.Z = 0.f;
 
-	OutRotation = UKismetMathLibrary::FindLookAtRotation(OutLocation, TargetLocation);
-	OutRotation.Pitch = 0.f;
-	OutRotation.Roll = 0.f;
+	if (ToTarget.IsNearlyZero())
+	{
+		return false;
+	}
 
-	return true;
+	ToTarget.Normalize();
+
+	// This is the "far side" of the target from my current position.
+	const FVector OppositeSideDirection = ToTarget;
+
+	// Main desired teleport point
+	const FVector BaseLocation =
+		TargetLocation
+		+ (OppositeSideDirection * TeleportDistanceBeyondTarget)
+		+ FVector(0.f, 0.f, UpOffset);
+
+	// Try exact point first, then a few nearby offsets
+	TArray<FVector> CandidateLocations;
+	CandidateLocations.Add(BaseLocation);
+
+	const FVector RightVector = FVector::CrossProduct(FVector::UpVector, OppositeSideDirection).GetSafeNormal();
+
+	const float SideStep = 50.f;
+	const float BackStep = 35.f;
+
+	CandidateLocations.Add(BaseLocation + RightVector * SideStep);
+	CandidateLocations.Add(BaseLocation - RightVector * SideStep);
+	CandidateLocations.Add(BaseLocation - OppositeSideDirection * BackStep);
+	CandidateLocations.Add(BaseLocation + RightVector * SideStep - OppositeSideDirection * BackStep);
+	CandidateLocations.Add(BaseLocation - RightVector * SideStep - OppositeSideDirection * BackStep);
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	// You should ideally match these to your character capsule.
+	const float CapsuleRadius = 42.f;
+	const float CapsuleHalfHeight = 96.f;
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(AvatarActor);
+	QueryParams.AddIgnoredActor(CachedTargetCharacter);
+
+	for (const FVector& Candidate : CandidateLocations)
+	{
+		FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
+
+		const bool bBlocked = World->OverlapBlockingTestByChannel(
+			Candidate,
+			FQuat::Identity,
+			ECC_Pawn,
+			CapsuleShape,
+			QueryParams
+		);
+
+		if (!bBlocked)
+		{
+			OutLocation = Candidate;
+
+			// Face toward the target
+			OutRotation = UKismetMathLibrary::FindLookAtRotation(OutLocation, TargetLocation);
+			OutRotation.Pitch = 0.f;
+			OutRotation.Roll = 0.f;
+
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void UShadowStrike::TeleportAndFaceTarget(const FVector& TeleportLocation)
@@ -203,6 +266,15 @@ void UShadowStrike::StunTarget() const
 		return;
 	}
 	CachedSourceCharacter->ApplyStunToTarget(CachedTargetCharacter, StunDuration);
+}
+
+void UShadowStrike::DamageTarget() const
+{
+	if (!IsValid(CachedTargetCharacter))
+	{
+		return;
+	}
+	CachedSourceCharacter->ApplyDamageToTarget(CachedTargetCharacter, AbilityInfo->Damage);
 }
 
 void UShadowStrike::OnMontageCompleted()

@@ -1,9 +1,9 @@
 ﻿#include "NexusMinionBase.h"
 
 #include "AIController.h"
-#include "GameplayCueFunctionLibrary.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/GameMode/CapturePoints/CapturePoint.h"
 
@@ -20,6 +20,18 @@ void ANexusMinionBase::BeginPlay()
 	{
 		StartTargetScan();
 	}
+}
+
+void ANexusMinionBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ThisClass, CurrentTarget);
+}
+
+void ANexusMinionBase::OnRep_CurrentTarget()
+{
+	OnCombatStateChanged.Broadcast();
 }
 
 void ANexusMinionBase::StartHitscan()
@@ -60,6 +72,11 @@ void ANexusMinionBase::EndHitscan()
 
 void ANexusMinionBase::Hitscan()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	DoHitscan();
 }
 
@@ -105,29 +122,13 @@ void ANexusMinionBase::DoHitscan()
 		}
 
 		AlreadyHitCharactersInWindow.Add(Character);
-
-		ApplyDamageToTarget(Character, DamageToDeal);
-
-		FGameplayCueParameters Parameters;
-		Parameters.Location = HitResult.ImpactPoint;
-		Parameters.Normal = HitResult.ImpactNormal;
-		Parameters.Instigator = this;
-
-		UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
-			Character,
-			FGameplayTag::RequestGameplayTag(TEXT("GameplayCue.Damage.Burst")),
-			Parameters);
+		ResolveMeleeHit(Character, HitResult, DamageToDeal);
 	}
 }
 
 void ANexusMinionBase::InitializeCombatLoadout()
 {
 	Super::InitializeCombatLoadout();
-
-	if (HasAuthority() && BaseAbilities.Num() > 0)
-	{
-		GrantAbilitySet(ENexusAbilitySource::Base, BaseAbilities);
-	}
 }
 
 void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID)
@@ -203,7 +204,7 @@ void ANexusMinionBase::ApplyTeamVisuals() const
 
 void ANexusMinionBase::StartTargetScan()
 {
-	if (!GetWorld())
+	if (!HasAuthority() || !GetWorld())
 	{
 		return;
 	}
@@ -219,7 +220,7 @@ void ANexusMinionBase::StartTargetScan()
 
 void ANexusMinionBase::StopTargetScan()
 {
-	if (!GetWorld())
+	if (!HasAuthority() || !GetWorld())
 	{
 		return;
 	}
@@ -391,4 +392,7 @@ void ANexusMinionBase::UpdateTargetActor()
 			BB->SetValueAsObject(TEXT("TargetActor"), CurrentTarget);
 		}
 	}
+
+	ForceNetUpdate();
+	OnCombatStateChanged.Broadcast();
 }

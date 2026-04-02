@@ -1,6 +1,5 @@
 ﻿#include "NexusMeleeWeaponBase.h"
 
-#include "GameplayCueFunctionLibrary.h"
 #include "Components/StaticMeshComponent.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 
@@ -21,7 +20,56 @@ bool ANexusMeleeWeaponBase::RefreshOwnerCharacter()
 	return IsValid(OwnerCharacter);
 }
 
+static bool CanWeaponIssueOwningClientRPC(const ANexusCharacterBase* OwnerCharacter)
+{
+	return IsValid(OwnerCharacter) && OwnerCharacter->IsLocallyControlled();
+}
+
+
 void ANexusMeleeWeaponBase::StartHitscan()
+{
+	UE_LOG(LogTemp, Warning, TEXT("StartHitscan %s Role=%d"), *GetName(), (int32)GetLocalRole());
+	if (HasAuthority())
+	{
+		StartHitscan_Internal();
+		return;
+	}
+
+	if (!RefreshOwnerCharacter() || !CanWeaponIssueOwningClientRPC(OwnerCharacter))
+	{
+		return;
+	}
+
+	ServerStartHitscan();
+}
+
+void ANexusMeleeWeaponBase::EndHitscan()
+{
+	if (HasAuthority())
+	{
+		EndHitscan_Internal();
+		return;
+	}
+
+	if (!RefreshOwnerCharacter() || !CanWeaponIssueOwningClientRPC(OwnerCharacter))
+	{
+		return;
+	}
+
+	ServerEndHitscan();
+}
+
+void ANexusMeleeWeaponBase::ServerStartHitscan_Implementation()
+{
+	StartHitscan_Internal();
+}
+
+void ANexusMeleeWeaponBase::ServerEndHitscan_Implementation()
+{
+	EndHitscan_Internal();
+}
+
+void ANexusMeleeWeaponBase::StartHitscan_Internal()
 {
 	if (!GetWorld())
 	{
@@ -51,7 +99,7 @@ void ANexusMeleeWeaponBase::StartHitscan()
 	}
 }
 
-void ANexusMeleeWeaponBase::EndHitscan()
+void ANexusMeleeWeaponBase::EndHitscan_Internal()
 {
 	if (GetWorld())
 	{
@@ -63,12 +111,18 @@ void ANexusMeleeWeaponBase::EndHitscan()
 
 void ANexusMeleeWeaponBase::Hitscan()
 {
+	UE_LOG(LogTemp, Warning, TEXT("Hitscan %s Role=%d"), *GetName(), (int32)GetLocalRole());
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	DoHitscan();
 }
 
 void ANexusMeleeWeaponBase::DoHitscan()
 {
-	if (!RefreshOwnerCharacter())
+	if (!HasAuthority() || !RefreshOwnerCharacter())
 	{
 		return;
 	}
@@ -106,8 +160,6 @@ void ANexusMeleeWeaponBase::DoHitscan()
 		{
 			ProcessWeaponTrace(OffHandWeaponMesh, AlreadyHitCharactersInWindow);
 		}
-
-		return;
 	}
 }
 
@@ -115,7 +167,10 @@ void ANexusMeleeWeaponBase::ProcessWeaponTrace(
 	const UStaticMeshComponent* MeshToTrace,
 	TArray<TObjectPtr<ANexusCharacterBase>>& AlreadyHitCharacters) const
 {
-	if (!IsValid(OwnerCharacter) || !IsValid(MeshToTrace))
+	UE_LOG(LogTemp, Warning, TEXT("ProcessWeaponTrace Weapon=%s Owner=%s"),
+		*GetName(),
+		*GetNameSafe(OwnerCharacter));
+	if (!HasAuthority() || !IsValid(OwnerCharacter) || !IsValid(MeshToTrace))
 	{
 		return;
 	}
@@ -151,17 +206,9 @@ void ANexusMeleeWeaponBase::ProcessWeaponTrace(
 		}
 
 		AlreadyHitCharacters.Add(Character);
-
-		OwnerCharacter->ApplyDamageToTarget(Character, DamageToDeal);
-
-		FGameplayCueParameters Parameters;
-		Parameters.Location = HitResult.ImpactPoint;
-		Parameters.Normal = HitResult.ImpactNormal;
-		Parameters.Instigator = OwnerCharacter;
-
-		UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
-			Character,
-			FGameplayTag::RequestGameplayTag(TEXT("GameplayCue.Damage.Burst")),
-			Parameters);
+		UE_LOG(LogTemp, Warning, TEXT("About to ResolveMeleeHit Attacker=%s Target=%s"),
+	*GetNameSafe(OwnerCharacter),
+	*GetNameSafe(Character));
+		OwnerCharacter->ResolveMeleeHit(Character, HitResult, DamageToDeal);
 	}
 }

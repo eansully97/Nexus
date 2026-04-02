@@ -30,6 +30,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Projectile")
 	float TraceDistance = 15000.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Projectile")
+	float ProjectileDamage = 10.f;
+	
+
 	UFUNCTION(BlueprintCallable, Category="Projectile")
 	bool SpawnProjectile();
 

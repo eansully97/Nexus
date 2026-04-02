@@ -24,4 +24,7 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityInfo")
 	UTexture2D* AbilityIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Damage")
+	float Damage;
 };

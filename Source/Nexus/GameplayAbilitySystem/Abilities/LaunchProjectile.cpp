@@ -74,12 +74,13 @@ bool ULaunchProjectile::SpawnProjectile()
 		UE_LOG(LogTemp, Warning, TEXT("FireProjectile Ability: SpawnActorDeferred failed"));
 		return false;
 	}
-
+	
 	Projectile->InitializeProjectile(
 		AvatarActor,
 		GetAbilitySystemComponentFromActorInfo(),
 		ShootDirection,
-		ProjectileSpeed
+		ProjectileSpeed,
+		ProjectileDamage
 	);
 
 	UGameplayStatics::FinishSpawningActor(Projectile, FTransform(SpawnRotation, SpawnLocation));

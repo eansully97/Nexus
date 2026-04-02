@@ -20,6 +20,9 @@ class NEXUS_API UShadowStrike : public UNexusGameplayAbility
 	
 public:
 	UShadowStrike();
+	/**
+	* Design Ideas: Extra effect when hitting the front of a character
+	 */
 
 protected:
 	virtual void ActivateAbility(
@@ -42,13 +45,13 @@ protected:
 	float TraceDistance = 5000.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
-	float MaxRange = 2000.f;
+	float MaxRange = 1500.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
-	float TeleportDistanceBehindTarget = 85.f;
+	float TeleportDistanceBeyondTarget = 120.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
-	float SideOffset = 50.f;
+	float UpOffset = 50.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shadow Strike")
 	float StunDuration = 0.6f;
@@ -73,6 +76,7 @@ protected:
 	void TeleportAndFaceTarget(const FVector& TeleportLocation);
 
 	void StunTarget() const;
+	void DamageTarget() const;
 	void Cleanup();
 
 	UFUNCTION()

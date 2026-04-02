@@ -8,6 +8,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "Nexus/NexusGameplayTags.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/DataAssets/GameplayEffectClassSet.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
@@ -44,16 +45,16 @@ void ANexusCharacterBase::BeginPlay()
 void ANexusCharacterBase::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
-	
+
+	SetOwner(NewController);
+
+	InitializeAbilityActorInfo();
+	InitializeFromPlayerState();
+
 	if (HasAuthority())
 	{
 		InitializeCombatLoadout();
 	}
-	SetOwner(NewController);
-	
-	InitializeAbilityActorInfo();
-	InitializeFromPlayerState();
-	
 }
 
 void ANexusCharacterBase::OnRep_Controller()
@@ -64,7 +65,10 @@ void ANexusCharacterBase::OnRep_Controller()
 	{
 		SetOwner(Controller);
 	}
+
+	InitializeAbilityActorInfo();
 }
+
 
 void ANexusCharacterBase::OnRep_PlayerState()
 {
@@ -184,12 +188,14 @@ void ANexusCharacterBase::ApplyGameplayEffectSpecsToTarget(
 	const TArray<FGameplayEffectSpecHandle>& EffectSpecHandles,
 	ANexusCharacterBase* TargetToEffect)
 {
-	if (!IsValid(TargetToEffect))
+	if (!HasAuthority() || !IsValid(TargetToEffect))
 	{
 		return;
 	}
 
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponent();
 	UAbilitySystemComponent* TargetASC = TargetToEffect->GetAbilitySystemComponent();
+
 	if (!TargetASC)
 	{
 		return;
@@ -202,7 +208,14 @@ void ANexusCharacterBase::ApplyGameplayEffectSpecsToTarget(
 			continue;
 		}
 
-		TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
+		if (SourceASC)
+		{
+			SourceASC->ApplyGameplayEffectSpecToTarget(*EffectSpecHandle.Data.Get(), TargetASC);
+		}
+		else
+		{
+			TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
+		}
 	}
 }
 
@@ -222,7 +235,7 @@ void ANexusCharacterBase::ApplySetByCallerEffectToTarget(
 	float Magnitude,
 	FGameplayTag DataTag)
 {
-	if (!IsValid(Target) || !EffectClass)
+	if (!HasAuthority() || !IsValid(Target) || !EffectClass || !DataTag.IsValid())
 	{
 		return;
 	}
@@ -237,19 +250,21 @@ void ANexusCharacterBase::ApplySetByCallerEffectToTarget(
 
 	FGameplayEffectContextHandle ContextHandle = SourceASC->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
+	ContextHandle.AddInstigator(this, this);
 
 	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(EffectClass, 1.f, ContextHandle);
 	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
 	{
 		return;
 	}
+
 	SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
-	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 }
 
 void ANexusCharacterBase::ApplyStunToTarget(ANexusCharacterBase* Target, float Duration)
 {
-	if (!EffectSet)
+	if (!EffectSet || Duration <= 0.f)
 	{
 		return;
 	}
@@ -258,7 +273,7 @@ void ANexusCharacterBase::ApplyStunToTarget(ANexusCharacterBase* Target, float D
 		Target,
 		EffectSet->StunEffect,
 		Duration,
-		FGameplayTag::RequestGameplayTag(TEXT("Data.Value.Duration"))
+		NexusGameplayTags::Data_Value_Duration
 	);
 }
 
@@ -273,14 +288,152 @@ void ANexusCharacterBase::ApplyDamageToTarget(ANexusCharacterBase* Target, float
 	{
 		return;
 	}
-	Damage = Damage * -1;
+	Damage = Damage *= -1;
 
 	ApplySetByCallerEffectToTarget(
 		Target,
 		EffectSet->DamageEffect,
 		Damage,
-		FGameplayTag::RequestGameplayTag(TEXT("Data.Value.Damage"))
+		NexusGameplayTags::Data_Value_Damage
 	);
+}
+
+bool ANexusCharacterBase::CanParryMeleeHit(
+	ANexusCharacterBase* Attacker) const
+{
+	if (!IsValid(Attacker) || GetIsDead())
+	{
+		return false;
+	}
+
+	if (!AbilitySystemComponent)
+	{
+		return false;
+	}
+
+	if (!AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Defense_Deflecting))
+	{
+		return false;
+	}
+
+	if (!AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Defense_DeflectWindow))
+	{
+		return false;
+	}
+
+	if (!IsAttackWithinDeflectAngle(Attacker, 0.2f))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool ANexusCharacterBase::IsAttackWithinDeflectAngle(
+	ANexusCharacterBase* Attacker,
+	float MinDotThreshold) const
+{
+	if (!IsValid(Attacker))
+	{
+		return false;
+	}
+
+	const FVector DefenderForward = GetActorForwardVector().GetSafeNormal();
+	const FVector ToAttacker = (Attacker->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+
+	const float Dot = FVector::DotProduct(DefenderForward, ToAttacker);
+	return Dot >= MinDotThreshold;
+}
+bool ANexusCharacterBase::SendParryGameplayEvent(
+	ANexusCharacterBase* Attacker,
+	const FHitResult& HitResult)
+{
+	if (!HasAuthority() || !IsValid(Attacker) || !AbilitySystemComponent)
+	{
+		return false;
+	}
+
+	const FGameplayTag ParryEventTag = NexusGameplayTags::Event_Parry_Activated;
+
+	FGameplayEventData Payload;
+	Payload.EventTag = ParryEventTag;
+	Payload.Instigator = Attacker;
+	Payload.Target = this;
+	Payload.TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(HitResult);
+	Payload.OptionalObject = Attacker;
+
+	const int32 NumTriggered = AbilitySystemComponent->HandleGameplayEvent(ParryEventTag, &Payload);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("HandleGameplayEvent Defender=%s TriggeredAbilities=%d"),
+		*GetName(),
+		NumTriggered);
+
+	return NumTriggered > 0;
+}
+
+ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
+	ANexusCharacterBase* Target,
+	const FHitResult& HitResult,
+	float Damage)
+{
+	if (!HasAuthority())
+	{
+		return ENexusHitResolutionResult::None;
+	}
+
+	if (!IsValid(Target) || Target->GetIsDead())
+	{
+		return ENexusHitResolutionResult::None;
+	}
+
+	if (Target->CanParryMeleeHit(this))
+	{
+		const bool bParryTriggered = Target->SendParryGameplayEvent(this, HitResult);
+		if (bParryTriggered)
+		{
+			return ENexusHitResolutionResult::Parried;
+		}
+	}
+	
+	ApplyDamageToTarget(Target, Damage);
+	
+	FGameplayCueParameters Parameters;
+	Parameters.Location = HitResult.ImpactPoint;
+	Parameters.Normal = HitResult.ImpactNormal;
+	Parameters.Instigator = this;
+
+	UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
+		Target,
+		NexusGameplayTags::GameplayCue_Damage_Burst,
+		Parameters);
+	
+	return ENexusHitResolutionResult::Damaged;
+}
+
+void ANexusCharacterBase::DebugLogGrantedAbilities(const FString& Context) const
+{
+	if (!AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s] %s has no ASC"), *Context, *GetName());
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> Handles;
+	AbilitySystemComponent->GetAllAbilities(Handles);
+
+	UE_LOG(LogTemp, Warning, TEXT("[%s] Granted abilities for %s"), *Context, *GetName());
+
+	for (const FGameplayAbilitySpecHandle& Handle : Handles)
+	{
+		const FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromHandle(Handle);
+		if (!Spec || !Spec->Ability)
+		{
+			continue;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("  %s"), *Spec->Ability->GetClass()->GetName());
+	}
 }
 
 void ANexusCharacterBase::SetTeamID(ENexusTeamID NewTeamID)
@@ -393,27 +546,19 @@ void ANexusCharacterBase::PlayDeathAnimation()
 
 void ANexusCharacterBase::ApplyDeathState_Server()
 {
-	// Dead tag
 	if (AbilitySystemComponent)
 	{
-		FGameplayTag DeadTag = FGameplayTag::RequestGameplayTag(TEXT("Status.Dead"));
-		AbilitySystemComponent->AddLooseGameplayTag(DeadTag);
-
-		// Stop active abilities immediately
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
-	// Stop movement right away
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->DisableMovement();
 		MoveComp->StopMovementImmediately();
 	}
 
-	// Stop attack timers on this actor
 	GetWorldTimerManager().ClearAllTimersForObject(this);
 
-	// Stop AI logic if this is AI-controlled
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{
 		AI->StopMovement();
@@ -427,10 +572,29 @@ void ANexusCharacterBase::OnRep_IsDead()
 
 void ANexusCharacterBase::HandleDeathStateChanged()
 {
+	RefreshDeadGameplayTag();
 	ApplyDeathPresentation();
 	OnCombatStateChanged.Broadcast();
 }
 
+void ANexusCharacterBase::RefreshDeadGameplayTag()
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	const bool bHasDeadTag = AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Dead);
+
+	if (bIsDead && !bHasDeadTag)
+	{
+		AbilitySystemComponent->AddLooseGameplayTag(NexusGameplayTags::Status_Dead);
+	}
+	else if (!bIsDead && bHasDeadTag)
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(NexusGameplayTags::Status_Dead);
+	}
+}
 
 void ANexusCharacterBase::ApplyDeathPresentation()
 {

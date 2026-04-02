@@ -19,7 +19,7 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Movement_Dash);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Swing);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Block);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Deflect);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Dagger_Slash);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Dagger_ShadowStrike);
@@ -43,7 +43,7 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Dagger_ShadowStrike);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Axe_Swing);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Axe_Block);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Axe_Deflect);
 
 	// -------------------------
 	// Data
@@ -51,6 +51,7 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Value_Cooldown);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Value_Damage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Value_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Value_Stamina);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Value_Duration);
 
 	// -------------------------
@@ -59,8 +60,6 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Updated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Dash_Avtivated);
-	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Parry_Activated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Activated);
@@ -73,10 +72,12 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Explode);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Spawn);
 
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Parry_Activated);
+
 	// -------------------------
 	// GameplayCue
 	// -------------------------
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Blocked);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Deflected);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Burst);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Heal_Burst);
@@ -105,7 +106,8 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Stealth);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Stunned);
 	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Defense_Blocking);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Defense_Deflecting);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Defense_DeflectWindow);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Objective_Capturing);
 	

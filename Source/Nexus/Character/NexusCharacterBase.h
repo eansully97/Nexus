@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
-
 #include "GameFramework/Character.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "NexusCharacterBase.generated.h"
@@ -18,6 +17,15 @@ class ANexusPlayerState;
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCombatStateChanged);
+
+UENUM(BlueprintType)
+enum class ENexusHitResolutionResult : uint8
+{
+	None UMETA(DisplayName="None"),
+	Damaged UMETA(DisplayName="Damaged"),
+	Deflected UMETA(DisplayName="Deflected"),
+	Parried UMETA(DisplayName="Parried")
+};
 
 UENUM(BlueprintType)
 enum class ENexusAbilitySource : uint8
@@ -102,10 +110,38 @@ protected:
 	
 	virtual void HandleCurrentCapturePointChanged();
 
+	void RefreshDeadGameplayTag();
+
 	// Shared GAS init
 	virtual void InitializeAbilityActorInfo();
 	virtual void InitializeFromPlayerState();
 	virtual void InitializeCombatLoadout();
+public:
+	// Parry
+	UFUNCTION(BlueprintCallable)
+	ENexusHitResolutionResult ResolveMeleeHit(
+		ANexusCharacterBase* Target,
+		const FHitResult& HitResult,
+		float Damage
+	);
+	void DebugLogGrantedAbilities(const FString& Context) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool CanParryMeleeHit(
+		ANexusCharacterBase* Attacker
+	) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool IsAttackWithinDeflectAngle(
+		ANexusCharacterBase* Attacker,
+		float MinDotThreshold = 0.2f
+	) const;
+
+	UFUNCTION(BlueprintCallable)
+	bool SendParryGameplayEvent(
+		ANexusCharacterBase* Attacker,
+		const FHitResult& HitResult
+	);
 
 public:
 	// ---- Team ----

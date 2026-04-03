@@ -25,6 +25,8 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 {
 	if (!IsValidSessionInterface())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: SessionInterface is invalid"));
+		MultiplayerOnCreateSessionComplete.Broadcast(false);
 		return;
 	}
 
@@ -36,10 +38,11 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 		LastMatchType = MatchType;
 
 		DestroySession();
+		return;
 	}
 
-	// Store the delegate in a FDelegateHandle so we can later remove it from the delegate list
-	CreateSessionCompleteDelegateHandle = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+	CreateSessionCompleteDelegateHandle =
+		SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
 
 	LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
 	LastSessionSettings->bIsLANMatch = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
@@ -52,37 +55,65 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 	LastSessionSettings->Set(FName("MatchType"), MatchType, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->BuildUniqueId = 1;
 
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	const ULocalPlayer* LocalPlayer = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
+	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: LocalPlayer or PreferredUniqueNetId is invalid"));
+
+		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+		MultiplayerOnCreateSessionComplete.Broadcast(false);
+		return;
+	}
+
 	if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
 	{
-		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: SessionInterface->CreateSession returned false"));
 
-		// Broadcast our own custom delegate
+		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
+		return;
 	}
+
+	UE_LOG(LogTemp, Log, TEXT("CreateSession started: MatchType=%s PublicConnections=%d"), *MatchType, NumPublicConnections);
 }
 
 void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 {
 	if (!IsValidSessionInterface())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: SessionInterface is invalid"));
+		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
 		return;
 	}
 
-	FindSessionsCompleteDelegateHandle = SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+	FindSessionsCompleteDelegateHandle =
+		SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
 
 	LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
 	LastSessionSearch->MaxSearchResults = MaxSearchResults;
 	LastSessionSearch->bIsLanQuery = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	const ULocalPlayer* LocalPlayer = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
+	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: LocalPlayer or PreferredUniqueNetId is invalid"));
+
+		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
+		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
+		return;
+	}
+
 	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
 	{
-		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
+		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: SessionInterface->FindSessions returned false"));
 
+		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
+		return;
 	}
+
+	UE_LOG(LogTemp, Log, TEXT("FindSessions started: MaxSearchResults=%d"), MaxSearchResults);
 }
 
 void UMultiplayerSessionsSubsystem::JoinSession(const FOnlineSessionSearchResult& SessionResult)

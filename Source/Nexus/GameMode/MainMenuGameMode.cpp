@@ -1,4 +1,11 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "MainMenuGameMode.h"
 
+#include "Nexus/Controller/ANexusMenuPlayerController.h"
 
-#include "MainMenuGameMode.h"
+AMainMenuGameMode::AMainMenuGameMode()
+{
+	PlayerControllerClass = ANexusMenuPlayerController::StaticClass();
+	DefaultPawnClass = nullptr;
+	HUDClass = nullptr;
+	bStartPlayersAsSpectators = true;
+}

@@ -2,9 +2,11 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "OnlineSubsystem.h"
+#include "OnlineSessionSettings.h"
+#include "Interfaces/OnlineSessionInterface.h"
 #include "Online/OnlineSessionNames.h"
 #include "MultiplayerSessionsSubsystem.h"
-#include "OnlineSessionSettings.h"
+
 
 UNexusGameInstance::UNexusGameInstance()
 {

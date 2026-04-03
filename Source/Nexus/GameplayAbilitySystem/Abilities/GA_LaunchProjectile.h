@@ -4,18 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "NexusGameplayAbility.h"
-#include "LaunchProjectile.generated.h"
+#include "GA_LaunchProjectile.generated.h"
 
 class ANexusProjectile;
 /**
  * 
  */
 UCLASS()
-class NEXUS_API ULaunchProjectile : public UNexusGameplayAbility
+class NEXUS_API UGA_LaunchProjectile : public UNexusGameplayAbility
 {
 	GENERATED_BODY()
 public:
-	ULaunchProjectile();
+	UGA_LaunchProjectile();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Projectile")
@@ -32,10 +32,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Projectile")
 	float ProjectileDamage = 10.f;
-	
 
 	UFUNCTION(BlueprintCallable, Category="Projectile")
 	bool SpawnProjectile();
+	
+	void AddAttachGameplayCue(AActor* ActorToAttachTo);
 
 	bool GetProjectileSpawnData(FVector& OutSpawnLocation, FRotator& OutSpawnRotation, FVector& OutShootDirection) const;
 	bool GetAimHitLocation(FVector& OutHitLocation) const;

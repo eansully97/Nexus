@@ -3,6 +3,7 @@
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
+#include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
 UNexusAbilitySystemComponent::UNexusAbilitySystemComponent()
 {
@@ -30,8 +31,17 @@ void UNexusAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& In
 		return;
 	}
 
+	
+
 	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
 	{
+		if (const UNexusGameplayAbility* NexusAbility = Cast<UNexusGameplayAbility>(Spec.Ability))
+		{
+			if (NexusAbility->bActivateByEvent)
+			{
+				continue;
+			}
+		}
 		if (Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			AbilitySpecInputPressed(Spec);

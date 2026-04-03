@@ -309,12 +309,12 @@ void ANexusCharacterBase::ApplyDamageToTarget(ANexusCharacterBase* Target, float
 	{
 		return;
 	}
-	Damage = Damage *= -1;
+	const float EffectDamage = -Damage;
 
 	ApplySetByCallerEffectToTarget(
 		Target,
 		EffectSet->DamageEffect,
-		Damage,
+		EffectDamage,
 		NexusGameplayTags::Data_Value_Damage
 	);
 }

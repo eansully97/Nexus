@@ -1,6 +1,4 @@
-﻿// NexusProjectile.h
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -9,6 +7,7 @@
 class USphereComponent;
 class UProjectileMovementComponent;
 class UAbilitySystemComponent;
+class UPrimitiveComponent;
 
 UCLASS()
 class NEXUS_API ANexusProjectile : public AActor
@@ -36,11 +35,25 @@ protected:
 
 	UPROPERTY(Replicated)
 	float ReplicatedInitialSpeed = 0.f;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
-	float Damage;
+	float Damage = 0.f;
+
+	UPROPERTY()
+	bool bHasImpacted = false;
 
 	virtual void BeginPlay() override;
+
+	UFUNCTION()
+	void OnCollisionHit(
+		UPrimitiveComponent* HitComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		FVector NormalImpulse,
+		const FHitResult& Hit);
+
+	void HandleProjectileImpact(const FHitResult& Hit);
+	void SendExplodeGameplayEvent(const FHitResult& Hit) const;
 
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

@@ -83,7 +83,11 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Heal_Burst);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_Dash_Activate);
+	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_ArcanePulse_Activate);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Projectile_Spawned);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Projectile_Attached);
 
 	// -------------------------
 	// Input

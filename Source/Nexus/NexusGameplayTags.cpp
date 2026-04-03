@@ -74,7 +74,11 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Heal_Burst, "GameplayCue.Heal.Burst");
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_Dash_Activate, "GameplayCue.Ability.Dash.Activate");
+	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_ArcanePulse_Activate, "GameplayCue.Ability.ArcanePulse.Activate");
+	
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Projectile_Spawned, "GameplayCue.Projectile.Spawned");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Projectile_Attached, "GameplayCue.Projectile.Attached");
 
 	// -------------------------
 	// Input

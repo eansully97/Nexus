@@ -1,7 +1,7 @@
 ﻿// NexusGameplayAbility_FireProjectile.cpp
 
 
-#include "LaunchProjectile.h"
+#include "GA_LaunchProjectile.h"
 
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -15,12 +15,12 @@
 #include "Nexus/Controller/NexusPlayerController.h"
 #include "Nexus/Projectiles/NexusProjectile.h"
 
-ULaunchProjectile::ULaunchProjectile()
+UGA_LaunchProjectile::UGA_LaunchProjectile()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 }
 
-bool ULaunchProjectile::SpawnProjectile()
+bool UGA_LaunchProjectile::SpawnProjectile()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	if (!ActorInfo || !ActorInfo->IsNetAuthority())
@@ -50,6 +50,24 @@ bool ULaunchProjectile::SpawnProjectile()
 		return false;
 	}
 
+	ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(AvatarActor);
+	if (!Character)
+	{
+		return false;
+	}
+
+	UNexusWeaponsManager* WeaponsManager = Character->GetWeaponsManager();
+	if (!WeaponsManager)
+	{
+		return false;
+	}
+
+	ANexusWeaponBase* WeaponFiring = WeaponsManager->EquippedWeapon;
+	if (!WeaponFiring)
+	{
+		return false;
+	}
+
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = AvatarActor;
 	SpawnParams.Instigator = Cast<APawn>(AvatarActor);
@@ -60,6 +78,7 @@ bool ULaunchProjectile::SpawnProjectile()
 	{
 		return false;
 	}
+
 
 	ANexusProjectile* Projectile = World->SpawnActorDeferred<ANexusProjectile>(
 		ProjectileClass,
@@ -82,13 +101,13 @@ bool ULaunchProjectile::SpawnProjectile()
 		ProjectileSpeed,
 		ProjectileDamage
 	);
-
+	
 	UGameplayStatics::FinishSpawningActor(Projectile, FTransform(SpawnRotation, SpawnLocation));
-
+	
 	return true;
 }
 
-bool ULaunchProjectile::GetProjectileSpawnData(
+bool UGA_LaunchProjectile::GetProjectileSpawnData(
 	FVector& OutSpawnLocation,
 	FRotator& OutSpawnRotation,
 	FVector& OutShootDirection) const
@@ -127,7 +146,7 @@ bool ULaunchProjectile::GetProjectileSpawnData(
 	return true;
 }
 
-bool ULaunchProjectile::GetAimHitLocation(FVector& OutHitLocation) const
+bool UGA_LaunchProjectile::GetAimHitLocation(FVector& OutHitLocation) const
 {
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	APawn* Pawn = Cast<APawn>(AvatarActor);

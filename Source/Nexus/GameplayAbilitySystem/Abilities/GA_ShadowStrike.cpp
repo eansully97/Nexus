@@ -1,14 +1,20 @@
 ﻿#include "GA_ShadowStrike.h"
 
-
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 
 UGA_ShadowStrike::UGA_ShadowStrike()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
+	bActivateByEvent = true;
+	bRequiresValidTarget = true;
+	bRequiresTargetInRange = true;
+	ActivationRange = 1200.f;
 }
 
 void UGA_ShadowStrike::ActivateAbility(
@@ -17,9 +23,13 @@ void UGA_ShadowStrike::ActivateAbility(
 	const FGameplayAbilityActivationInfo ActivationInfo,
 	const FGameplayEventData* TriggerEventData)
 {
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	CachedSourceCharacter = GetSourceCharacter();
-	bCommittedSuccessfully = false;
+	CachedSourceCharacter = GetNexusCharacterFromActorInfo();
+	CachedTargetCharacter = GetTargetCharacterFromEventData(TriggerEventData);
+	CachedTeleportLocation = FVector::ZeroVector;
+	bStrikeExecuted = false;
+	bCueActive = false;
 
 	if (!IsValid(CachedSourceCharacter) || !ActorInfo || !ActorInfo->AvatarActor.IsValid())
 	{
@@ -27,16 +37,7 @@ void UGA_ShadowStrike::ActivateAbility(
 		return;
 	}
 
-	const AActor* EventTargetActor = TriggerEventData ? TriggerEventData->Target.Get() : nullptr;
-	CachedTargetCharacter = Cast<ANexusCharacterBase>(const_cast<AActor*>(EventTargetActor));
-
-	if (!IsValidTarget(CachedSourceCharacter, CachedTargetCharacter))
-	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
-	}
-
-	if (!IsInRange(CachedSourceCharacter, CachedTargetCharacter))
+	if (!IsAbilityTargetUsable(CachedSourceCharacter, CachedTargetCharacter))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -48,10 +49,7 @@ void UGA_ShadowStrike::ActivateAbility(
 		return;
 	}
 
-	FVector TeleportLocation = FVector::ZeroVector;
-	FRotator TeleportRotation = FRotator::ZeroRotator;
-
-	if (!FindTeleportLocation(TeleportLocation, TeleportRotation))
+	if (!FindTeleportLocation(CachedTeleportLocation))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -63,16 +61,7 @@ void UGA_ShadowStrike::ActivateAbility(
 		return;
 	}
 
-	bCommittedSuccessfully = true;
-
-	TeleportAndFaceTarget(TeleportLocation);
-
-	if (bStopTargetMovement)
-	{
-		StunTarget();
-	}
-
-	DamageTarget();
+	StartShadowStrikeCue();
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this,
@@ -89,6 +78,22 @@ void UGA_ShadowStrike::ActivateAbility(
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageCancelled);
 	MontageTask->ReadyForActivation();
+
+	if (TeleportDelay <= 0.f)
+	{
+		ExecuteShadowStrike();
+		return;
+	}
+
+	TeleportDelayTask = UAbilityTask_WaitDelay::WaitDelay(this, TeleportDelay);
+	if (!TeleportDelayTask)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	TeleportDelayTask->OnFinish.AddDynamic(this, &ThisClass::OnTeleportDelayFinished);
+	TeleportDelayTask->ReadyForActivation();
 }
 
 void UGA_ShadowStrike::EndAbility(
@@ -98,53 +103,13 @@ void UGA_ShadowStrike::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	StopShadowStrikeCue();
 	Cleanup();
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-ANexusCharacterBase* UGA_ShadowStrike::GetSourceCharacter() const
-{
-	return Cast<ANexusCharacterBase>(GetAvatarActorFromActorInfo());
-}
-
-bool UGA_ShadowStrike::IsValidTarget(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const
-{
-	if (!IsValid(SourceCharacter) || !IsValid(TargetCharacter))
-	{
-		return false;
-	}
-
-	if (SourceCharacter == TargetCharacter)
-	{
-		return false;
-	}
-
-	if (SourceCharacter->GetTeamID() == TargetCharacter->GetTeamID())
-	{
-		return false;
-	}
-
-	if (TargetCharacter->GetIsDead())
-	{
-		return false;
-	}
-
-	return true;
-}
-
-bool UGA_ShadowStrike::IsInRange(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const
-{
-	if (!IsValid(SourceCharacter) || !IsValid(TargetCharacter))
-	{
-		return false;
-	}
-
-	return FVector::DistSquared(
-		SourceCharacter->GetActorLocation(),
-		TargetCharacter->GetActorLocation()) <= FMath::Square(MaxRange);
-}
-
-bool UGA_ShadowStrike::FindTeleportLocation(FVector& OutLocation, FRotator& OutRotation) const
+bool UGA_ShadowStrike::FindTeleportLocation(FVector& OutLocation) const
 {
 	if (!IsValid(CachedTargetCharacter) || !IsValid(GetAvatarActorFromActorInfo()))
 	{
@@ -208,15 +173,11 @@ bool UGA_ShadowStrike::FindTeleportLocation(FVector& OutLocation, FRotator& OutR
 			FQuat::Identity,
 			ECC_Pawn,
 			CapsuleShape,
-			QueryParams
-		);
+			QueryParams);
 
 		if (!bBlocked)
 		{
 			OutLocation = Candidate;
-			OutRotation = UKismetMathLibrary::FindLookAtRotation(OutLocation, TargetLocation);
-			OutRotation.Pitch = 0.f;
-			OutRotation.Roll = 0.f;
 			return true;
 		}
 	}
@@ -232,24 +193,23 @@ void UGA_ShadowStrike::TeleportAndFaceTarget(const FVector& TeleportLocation)
 	}
 
 	const FVector SourceLoc = TeleportLocation;
-	FVector TargetLoc = CachedTargetCharacter->GetActorLocation();
-	TargetLoc.Z = SourceLoc.Z;
+	const FVector TargetLoc = CachedTargetCharacter->GetActorLocation();
 
 	const FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(SourceLoc, TargetLoc);
-	const FRotator FlatRot(0.f, LookAtRot.Yaw, 0.f);
+	const FRotator YawOnlyRot(0.f, LookAtRot.Yaw, 0.f);
 
-	CachedSourceCharacter->TeleportTo(TeleportLocation, FlatRot);
+	CachedSourceCharacter->TeleportTo(TeleportLocation, YawOnlyRot);
 
 	if (UCharacterMovementComponent* MoveComp = CachedSourceCharacter->GetCharacterMovement())
 	{
 		MoveComp->StopActiveMovement();
 	}
 
-	CachedSourceCharacter->SetActorRotation(FlatRot);
+	CachedSourceCharacter->SetActorRotation(YawOnlyRot);
 
 	if (AController* Controller = CachedSourceCharacter->GetController())
 	{
-		Controller->SetControlRotation(FlatRot);
+		Controller->SetControlRotation(LookAtRot);
 	}
 }
 
@@ -273,8 +233,110 @@ void UGA_ShadowStrike::DamageTarget() const
 	CachedSourceCharacter->ApplyDamageToTarget(CachedTargetCharacter, Damage);
 }
 
+void UGA_ShadowStrike::StartShadowStrikeCue()
+{
+	if (bCueActive || !ShadowStrikeCueTag.IsValid())
+	{
+		return;
+	}
+
+	AActor* CueTarget = CachedSourceCharacter
+		? static_cast<AActor*>(CachedSourceCharacter)
+		: GetAvatarActorFromActorInfo();
+
+	if (!IsValid(CueTarget))
+	{
+		return;
+	}
+
+	if (UNexusAbilityFunctionLibrary::AddGameplayCueToActor(
+		CueTarget,
+		ShadowStrikeCueTag,
+		CueTarget,
+		CueTarget,
+		this))
+	{
+		bCueActive = true;
+	}
+}
+
+void UGA_ShadowStrike::StopShadowStrikeCue()
+{
+	if (!bCueActive || !ShadowStrikeCueTag.IsValid())
+	{
+		return;
+	}
+
+	AActor* CueTarget = CachedSourceCharacter
+		? static_cast<AActor*>(CachedSourceCharacter)
+		: GetAvatarActorFromActorInfo();
+
+	if (!IsValid(CueTarget))
+	{
+		bCueActive = false;
+		return;
+	}
+
+	UNexusAbilityFunctionLibrary::RemoveGameplayCueFromActor(
+		CueTarget,
+		ShadowStrikeCueTag);
+
+	bCueActive = false;
+}
+
+void UGA_ShadowStrike::ExecuteShadowStrike()
+{
+	if (bStrikeExecuted)
+	{
+		return;
+	}
+
+	if (!IsValid(CachedSourceCharacter) || !IsValid(CachedTargetCharacter))
+	{
+		StopShadowStrikeCue();
+		return;
+	}
+
+	if (CachedTargetCharacter->GetIsDead())
+	{
+		StopShadowStrikeCue();
+		return;
+	}
+
+	FVector TeleportLocation = CachedTeleportLocation;
+	const bool bFoundFreshTeleportLocation = FindTeleportLocation(TeleportLocation);
+
+	if (!bFoundFreshTeleportLocation && TeleportLocation.IsNearlyZero())
+	{
+		StopShadowStrikeCue();
+		return;
+	}
+
+	TeleportAndFaceTarget(TeleportLocation);
+
+	if (bStopTargetMovement)
+	{
+		StunTarget();
+	}
+
+	DamageTarget();
+
+	bStrikeExecuted = true;
+	StopShadowStrikeCue();
+}
+
+void UGA_ShadowStrike::OnTeleportDelayFinished()
+{
+	ExecuteShadowStrike();
+}
+
 void UGA_ShadowStrike::OnMontageCompleted()
 {
+	if (!bStrikeExecuted)
+	{
+		ExecuteShadowStrike();
+	}
+
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -290,6 +352,12 @@ void UGA_ShadowStrike::OnMontageCancelled()
 
 void UGA_ShadowStrike::Cleanup()
 {
+	if (TeleportDelayTask)
+	{
+		TeleportDelayTask->EndTask();
+		TeleportDelayTask = nullptr;
+	}
+
 	if (MontageTask)
 	{
 		MontageTask->EndTask();
@@ -298,5 +366,7 @@ void UGA_ShadowStrike::Cleanup()
 
 	CachedSourceCharacter = nullptr;
 	CachedTargetCharacter = nullptr;
-	bCommittedSuccessfully = false;
+	CachedTeleportLocation = FVector::ZeroVector;
+	bStrikeExecuted = false;
+	bCueActive = false;
 }

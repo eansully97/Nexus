@@ -9,7 +9,10 @@
 class UCostAndCooldownConfig;
 class UAbilityInfo;
 class ANexusCharacterBase;
+class ANexusPlayerCharacter;
+class ANexusPlayerController;
 class UAbilitySystemComponent;
+class UNexusAbilitySystemComponent;
 class UGameplayEffect;
 
 USTRUCT(BlueprintType)
@@ -19,7 +22,6 @@ struct FAbilityBindingConfig
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Nexus|Tags")
 	FGameplayTag InputTag;
-	
 };
 
 UCLASS()
@@ -36,9 +38,6 @@ public:
 		float CostAmount = -1.f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
-	FAbilityBindingConfig AbilityBindConfig;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilityConfig")
@@ -46,6 +45,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
 	bool bRequiresValidTarget = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
+	bool bRequiresTargetInRange = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
+	float ActivationRange = 0.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation")
 	bool bActivateByEvent = false;
@@ -60,19 +65,42 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	ANexusCharacterBase* GetNexusCharacterFromActorInfo() const;
 
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	ANexusPlayerCharacter* GetNexusPlayerCharacterFromActorInfo() const;
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	ANexusPlayerController* GetNexusPlayerControllerFromActorInfo() const;
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	UNexusAbilitySystemComponent* GetNexusAbilitySystemComponentFromActorInfo() const;
+
 	UFUNCTION(BlueprintPure, Category="Nexus|Ability")
 	FGameplayTag GetPrimaryActivationEventTag() const;
 
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	UAbilitySystemComponent* GetSourceAbilitySystemComponent() const;
+	
+	ANexusCharacterBase* GetTargetCharacterFromEventData(const FGameplayEventData* TriggerEventData) const;
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	bool IsAbilityTargetUsable(const ANexusCharacterBase* SourceCharacter, const ANexusCharacterBase* TargetCharacter) const;
+	
+	bool IsAbilityTargetUsable(const ANexusCharacterBase* TargetCharacter) const;
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
+	bool TryGetUsableControllerTarget(ANexusCharacterBase*& OutTargetCharacter) const;
+
+	UFUNCTION(BlueprintPure, Category="Nexus|Ability")
+	bool AbilityRequiresUsableTarget() const;
+
+	UFUNCTION(BlueprintPure, Category="Nexus|Ability")
+	float GetEffectiveActivationRange() const;
 
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	void ApplyCooldownSetByCaller(float InDuration = -1.f);
 
-	// Pass a positive logical cost here. The helper will convert it to a negative additive GE magnitude.
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	void ApplyCostSetByCaller(float InCostAmount = -1.f);
-	void RemoveActivationOwnedTagsFromSource() const;
 
 protected:
 	virtual void EndAbility(

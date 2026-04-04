@@ -3,5 +3,6 @@
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Intermediate/Build/Win64/UnrealGame/Inc/MultiplayerSessions/UHT/Menu.gen.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Intermediate/Build/Win64/UnrealGame/Inc/MultiplayerSessions/UHT/MultiplayerSessions.init.gen.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Intermediate/Build/Win64/UnrealGame/Inc/MultiplayerSessions/UHT/MultiplayerSessionsSubsystem.gen.cpp"
+#include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/LobbyGameMode.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/Menu.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/MultiplayerSessions.cpp"

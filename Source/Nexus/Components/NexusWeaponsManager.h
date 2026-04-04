@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayAbilitySpecHandle.h"
 #include "Components/ActorComponent.h"
 #include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "NexusWeaponsManager.generated.h"

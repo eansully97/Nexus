@@ -90,9 +90,16 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 		SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
 
 	LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
+
+	const bool bIsNullSubsystem = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL";
+
 	LastSessionSearch->MaxSearchResults = MaxSearchResults;
-	LastSessionSearch->bIsLanQuery = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
-	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+	LastSessionSearch->bIsLanQuery = bIsNullSubsystem;
+
+	if (!bIsNullSubsystem)
+	{
+		LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+	}
 
 	const ULocalPlayer* LocalPlayer = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
 	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
@@ -113,7 +120,10 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("FindSessions started: MaxSearchResults=%d"), MaxSearchResults);
+	UE_LOG(LogTemp, Log, TEXT("FindSessions started: MaxSearchResults=%d | bIsLanQuery=%s | UsingSearchLobbies=%s"),
+		MaxSearchResults,
+		bIsNullSubsystem ? TEXT("true") : TEXT("false"),
+		bIsNullSubsystem ? TEXT("false") : TEXT("true"));
 }
 
 void UMultiplayerSessionsSubsystem::JoinSession(const FOnlineSessionSearchResult& SessionResult)
@@ -186,7 +196,13 @@ void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 	}
 
-	if (LastSessionSearch->SearchResults.Num() <= 0)
+	const int32 ResultCount = LastSessionSearch.IsValid() ? LastSessionSearch->SearchResults.Num() : -1;
+
+	UE_LOG(LogTemp, Log, TEXT("Subsystem OnFindSessionsComplete: Success=%s Results=%d"),
+		bWasSuccessful ? TEXT("true") : TEXT("false"),
+		ResultCount);
+
+	if (!LastSessionSearch.IsValid())
 	{
 		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
 		return;

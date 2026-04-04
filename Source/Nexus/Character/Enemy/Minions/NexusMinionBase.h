@@ -5,7 +5,9 @@
 #include "NexusMinionBase.generated.h"
 
 class ANexusCapturePoint;
+class ANexusCharacterBase;
 class UNexusGameplayAbility;
+class USkeletalMesh;
 
 UCLASS()
 class NEXUS_API ANexusMinionBase : public ANexusEnemyBase
@@ -46,9 +48,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void InitializeCombatLoadout() override;
 	virtual void ApplyTeamVisuals() const override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Loadout")
+	TArray<TSubclassOf<UNexusGameplayAbility>> DefaultClassAbilities;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Objective")
 	ANexusCapturePoint* TargetCapturePoint = nullptr;

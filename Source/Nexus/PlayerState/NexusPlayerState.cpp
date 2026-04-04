@@ -120,17 +120,7 @@ void ANexusPlayerState::HandleProfileChanged()
 	OnPlayerProfileChanged.Broadcast();
 }
 
-TArray<TSubclassOf<UNexusGameplayAbility>> ANexusPlayerState::GetClassAbilityList() const
-{
-	if (CharacterClassInfo)
-	{
-		return CharacterClassInfo->StartingAbilities;
-	}
-
-	return {};
-}
-
-TArray<TSubclassOf<UNexusGameplayAbility>> ANexusPlayerState::GetWeaponAbilityList() const
+TArray<FNexusAbilityGrant> ANexusPlayerState::GetWeaponAbilityGrants() const
 {
 	if (!CharacterClassInfo || !CharacterClassInfo->WeaponClassToEquip)
 	{
@@ -145,7 +135,12 @@ TArray<TSubclassOf<UNexusGameplayAbility>> ANexusPlayerState::GetWeaponAbilityLi
 		return {};
 	}
 
-	return WeaponCDO->WeaponConfig.AbilitiesToGrant;
+	return WeaponCDO->WeaponConfig.AbilityGrants;
+}
+
+TArray<FNexusAbilityGrant> ANexusPlayerState::GetClassAbilityGrants() const
+{
+	return CharacterClassInfo ? CharacterClassInfo->ClassAbilityGrants : TArray<FNexusAbilityGrant>();
 }
 
 void ANexusPlayerState::CapturePersistentCombatStateFromCharacter(ANexusCharacterBase* Character)
@@ -259,7 +254,6 @@ bool ANexusPlayerState::TryApplySinglePersistentCooldownToCharacter(
 		return true;
 	}
 
-	// If it's already active, treat it as restored.
 	{
 		FGameplayTagContainer QueryTags;
 		QueryTags.AddTag(PersistentCooldown.CooldownTag);
@@ -276,7 +270,6 @@ bool ANexusPlayerState::TryApplySinglePersistentCooldownToCharacter(
 		}
 	}
 
-	// Find a granted ability whose cooldown config matches this cooldown identity tag.
 	TArray<FGameplayAbilitySpecHandle> Handles;
 	ASC->GetAllAbilities(Handles);
 
@@ -307,7 +300,6 @@ bool ANexusPlayerState::TryApplySinglePersistentCooldownToCharacter(
 			Character);
 	}
 
-	// Matching ability not granted yet. Leave it pending.
 	return false;
 }
 
@@ -339,7 +331,7 @@ void ANexusPlayerState::ApplyPersistentCombatProfileToCharacter(ANexusCharacterB
 	}
 
 	Character->SetTeamID(TeamID);
-	Character->RebuildCombatLoadoutFromPlayerState();
+	Character->RebuildCombatLoadout();
 
 	if (PersistentLooseTags.Num() > 0)
 	{
@@ -349,7 +341,5 @@ void ANexusPlayerState::ApplyPersistentCombatProfileToCharacter(ANexusCharacterB
 			EGameplayTagReplicationState::TagOnly);
 	}
 
-	// Restores class/base cooldowns now.
-	// Weapon cooldowns may still be pending until the weapon is actually equipped.
 	TryApplyPersistentCooldownsToCharacter(Character);
 }

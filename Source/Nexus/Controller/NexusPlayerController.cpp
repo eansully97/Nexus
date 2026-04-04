@@ -1,13 +1,13 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "NexusPlayerController.h"
 
-
-#include "NexusPlayerController.h"
-
-#include "EnhancedInputSubsystems.h"
 #include "Camera/CameraActor.h"
+#include "EnhancedInputSubsystems.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
+#include "Nexus/FunctionLibraries/NexusCombatFunctionLibrary.h"
 #include "Nexus/GameMode/NexusGameMode.h"
 #include "Nexus/GameState/NexusGameState.h"
 #include "Nexus/HUD/NexusHUD.h"
@@ -35,25 +35,21 @@ ACameraActor* ANexusPlayerController::GetWaitingCameraActor(ENexusTeamID InTeamI
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsWithTag(GetWorld(), DesiredTag, FoundActors);
 
-	if (FoundActors.Num() == 0)
-	{
-		return nullptr;
-	}
-
-	return Cast<ACameraActor>(FoundActors[0]);
+	return FoundActors.Num() > 0 ? Cast<ACameraActor>(FoundActors[0]) : nullptr;
 }
 
 ENexusTeamID ANexusPlayerController::GetTeamID() const
 {
-	return GetPlayerState<ANexusPlayerState>()->GetTeamID();
+	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	return PS ? PS->GetTeamID() : ENexusTeamID::Neutral;
 }
 
 void ANexusPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Add Input Mapping Contexts
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
 		for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
 		{
@@ -77,6 +73,7 @@ void ANexusPlayerController::OnRep_Pawn()
 void ANexusPlayerController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
 	GetCrosshairHitResult(CurrentCrosshairHit, 10000.f);
 	UpdateTargetedCharacter();
 }
@@ -84,14 +81,13 @@ void ANexusPlayerController::Tick(float DeltaTime)
 void ANexusPlayerController::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
-	
 	ShowWaitingCameraForTeam();
 }
 
 void ANexusPlayerController::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, CurrentCrosshairHit)
+	DOREPLIFETIME(ThisClass, CurrentCrosshairHit);
 }
 
 void ANexusPlayerController::RefreshHUDBindings()
@@ -106,12 +102,12 @@ void ANexusPlayerController::RefreshHUDBindings()
 	{
 		return;
 	}
-	
+
 	if (!NexusHUD->GetMainHUDWidget())
 	{
 		NexusHUD->InitMainHUDWidget();
 	}
-	
+
 	UNexusMainHUDWidget* MainWidget = NexusHUD->GetMainHUDWidget();
 	if (!MainWidget)
 	{
@@ -134,8 +130,8 @@ bool ANexusPlayerController::GetCrosshairHitResult(FHitResult& OutHit, float Tra
 		ViewportY * 0.5f
 	);
 
-	FVector WorldLocation;
-	FVector WorldDirection;
+	FVector WorldLocation = FVector::ZeroVector;
+	FVector WorldDirection = FVector::ForwardVector;
 
 	if (!DeprojectScreenPositionToWorld(
 		ScreenCenter.X,
@@ -162,7 +158,7 @@ bool ANexusPlayerController::GetCrosshairHitResult(FHitResult& OutHit, float Tra
 	);
 }
 
-FHitResult ANexusPlayerController::GetCurrentCrosshairHit()
+FHitResult ANexusPlayerController::GetCurrentCrosshairHit() const
 {
 	return CurrentCrosshairHit;
 }
@@ -178,13 +174,8 @@ void ANexusPlayerController::UpdateTargetedCharacter()
 		return;
 	}
 
-	AActor* HitActor = CurrentCrosshairHit.GetActor();
-	ANexusCharacterBase* TargetCharacter = Cast<ANexusCharacterBase>(HitActor);
-
-	if (!IsValid(TargetCharacter) && IsValid(HitActor))
-	{
-		TargetCharacter = Cast<ANexusCharacterBase>(HitActor->GetOwner());
-	}
+	ANexusCharacterBase* TargetCharacter =
+		UNexusCombatFunctionLibrary::GetNexusCharacterFromActor(CurrentCrosshairHit.GetActor());
 
 	if (!IsValidTargetCharacter(SourceCharacter, TargetCharacter))
 	{
@@ -195,49 +186,50 @@ void ANexusPlayerController::UpdateTargetedCharacter()
 	bHasValidTarget = true;
 }
 
-bool ANexusPlayerController::IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter,
+bool ANexusPlayerController::IsValidTargetCharacter(
+	ANexusCharacterBase* SourceCharacter,
 	ANexusCharacterBase* TargetCharacter) const
 {
-	if (!IsValid(SourceCharacter) || !IsValid(TargetCharacter))
-	{
-		return false;
-	}
+	return UNexusCombatFunctionLibrary::IsValidLivingEnemyTarget(SourceCharacter, TargetCharacter);
+}
 
-	if (SourceCharacter == TargetCharacter)
-	{
-		return false;
-	}
+bool ANexusPlayerController::HasUsableTargetForAbility(const UNexusGameplayAbility* Ability) const
+{
+	ANexusCharacterBase* OutTarget = nullptr;
+	const ANexusCharacterBase* SourceCharacter = Cast<ANexusCharacterBase>(GetPawn());
 
-	if (SourceCharacter->GetTeamID() == TargetCharacter->GetTeamID())
-	{
-		return false;
-	}
+	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+		this,
+		SourceCharacter,
+		Ability,
+		OutTarget);
+}
 
-	if (TargetCharacter->GetIsDead())
-	{
-		return false;
-	}
+ANexusCharacterBase* ANexusPlayerController::GetUsableTargetForAbility(const UNexusGameplayAbility* Ability) const
+{
+	ANexusCharacterBase* OutTarget = nullptr;
+	const ANexusCharacterBase* SourceCharacter = Cast<ANexusCharacterBase>(GetPawn());
 
-	return true;
+	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+		this,
+		SourceCharacter,
+		Ability,
+		OutTarget)
+		? OutTarget
+		: nullptr;
 }
 
 void ANexusPlayerController::ShowWaitingCameraForTeam()
 {
 	ACameraActor* WaitingCamera = GetWaitingCameraActor(GetTeamID());
-
 	if (!WaitingCamera)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ShowWaitingCameraForTeam: No waiting camera found for TeamId %d on %s"), GetTeamID(), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("ShowWaitingCameraForTeam: No waiting camera found for %s"), *GetName());
 		return;
 	}
 
 	SetControlRotation(WaitingCamera->GetActorRotation());
 	SetViewTargetWithBlend(WaitingCamera, 0.f);
-
-	UE_LOG(LogTemp, Warning, TEXT("ShowWaitingCameraForTeam: Using camera %s for TeamId %d on %s"),
-		*GetNameSafe(WaitingCamera),
-		GetTeamID(),
-		*GetName());
 }
 
 void ANexusPlayerController::ReturnToPawnCamera()
@@ -248,6 +240,7 @@ void ANexusPlayerController::ReturnToPawnCamera()
 		UE_LOG(LogTemp, Warning, TEXT("ReturnToPawnCamera: No pawn on %s"), *GetName());
 		return;
 	}
+
 	HideClassSelectUI();
 	SetControlRotation(ControlledPawn->GetActorRotation());
 	SetViewTargetWithBlend(ControlledPawn, 0.f);
@@ -299,7 +292,6 @@ void ANexusPlayerController::HideClassSelectUI()
 
 	FInputModeGameOnly InputMode;
 	SetInputMode(InputMode);
-	
 }
 
 void ANexusPlayerController::Server_SelectClass_Implementation(UCharacterClassInfo* ClassInfo)

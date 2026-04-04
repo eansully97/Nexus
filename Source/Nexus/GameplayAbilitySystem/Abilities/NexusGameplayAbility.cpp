@@ -1,10 +1,15 @@
 ﻿#include "NexusGameplayAbility.h"
 
 #include "AbilitySystemComponent.h"
+#include "GameFramework/Pawn.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/Character/Player/NexusPlayerCharacter.h"
+#include "Nexus/Controller/NexusPlayerController.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/DataAssets/CostAndCooldownConfig.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
+#include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 
 UNexusGameplayAbility::UNexusGameplayAbility()
 {
@@ -42,6 +47,26 @@ ANexusCharacterBase* UNexusGameplayAbility::GetNexusCharacterFromActorInfo() con
 	return Cast<ANexusCharacterBase>(GetAvatarActorFromActorInfo());
 }
 
+ANexusPlayerCharacter* UNexusGameplayAbility::GetNexusPlayerCharacterFromActorInfo() const
+{
+	return Cast<ANexusPlayerCharacter>(GetAvatarActorFromActorInfo());
+}
+
+ANexusPlayerController* UNexusGameplayAbility::GetNexusPlayerControllerFromActorInfo() const
+{
+	if (const APawn* Pawn = Cast<APawn>(GetAvatarActorFromActorInfo()))
+	{
+		return Cast<ANexusPlayerController>(Pawn->GetController());
+	}
+
+	return Cast<ANexusPlayerController>(GetOwningActorFromActorInfo());
+}
+
+UNexusAbilitySystemComponent* UNexusGameplayAbility::GetNexusAbilitySystemComponentFromActorInfo() const
+{
+	return Cast<UNexusAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo());
+}
+
 FGameplayTag UNexusGameplayAbility::GetPrimaryActivationEventTag() const
 {
 	for (const FAbilityTriggerData& TriggerData : AbilityTriggers)
@@ -59,6 +84,48 @@ FGameplayTag UNexusGameplayAbility::GetPrimaryActivationEventTag() const
 UAbilitySystemComponent* UNexusGameplayAbility::GetSourceAbilitySystemComponent() const
 {
 	return GetAbilitySystemComponentFromActorInfo();
+}
+
+ANexusCharacterBase* UNexusGameplayAbility::GetTargetCharacterFromEventData(
+	const FGameplayEventData* TriggerEventData) const
+{
+	if (!TriggerEventData)
+	{
+		return nullptr;
+	}
+
+	return Cast<ANexusCharacterBase>(const_cast<AActor*>(TriggerEventData->Target.Get()));
+}
+
+bool UNexusGameplayAbility::IsAbilityTargetUsable(
+	const ANexusCharacterBase* SourceCharacter,
+	const ANexusCharacterBase* TargetCharacter) const
+{
+	return UNexusAbilityFunctionLibrary::IsAbilityTargetUsable(this, SourceCharacter, TargetCharacter);
+}
+
+bool UNexusGameplayAbility::IsAbilityTargetUsable(const ANexusCharacterBase* TargetCharacter) const
+{
+	return IsAbilityTargetUsable(GetNexusCharacterFromActorInfo(), TargetCharacter);
+}
+
+bool UNexusGameplayAbility::TryGetUsableControllerTarget(ANexusCharacterBase*& OutTargetCharacter) const
+{
+	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+		GetNexusPlayerControllerFromActorInfo(),
+		GetNexusCharacterFromActorInfo(),
+		this,
+		OutTargetCharacter);
+}
+
+bool UNexusGameplayAbility::AbilityRequiresUsableTarget() const
+{
+	return bRequiresValidTarget;
+}
+
+float UNexusGameplayAbility::GetEffectiveActivationRange() const
+{
+	return FMath::Max(0.f, ActivationRange);
 }
 
 bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
@@ -83,7 +150,6 @@ bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
 	}
 
 	SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
-
 	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	return true;
 }
@@ -117,8 +183,6 @@ void UNexusGameplayAbility::ApplyCostSetByCaller(float InCostAmount)
 		return;
 	}
 
-	// Cost values are authored as positive logical values in the data asset.
-	// Convert to negative additive GE magnitude here.
 	const float LogicalCost = InCostAmount >= 0.f
 		? InCostAmount
 		: CostAndCooldownConfig->CostAmount;
@@ -134,7 +198,6 @@ void UNexusGameplayAbility::ApplyCostSetByCaller(float InCostAmount)
 		-LogicalCost);
 }
 
-
 void UNexusGameplayAbility::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
@@ -142,6 +205,5 @@ void UNexusGameplayAbility::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

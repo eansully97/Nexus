@@ -1,12 +1,15 @@
 ﻿#include "NexusAbilityEntryWidget.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
-#include "AbilitySystemComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Controller/NexusPlayerController.h"
 #include "Nexus/DataAssets/AbilityInfo.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
 void UNexusAbilityEntryWidget::NativeDestruct()
@@ -35,6 +38,7 @@ void UNexusAbilityEntryWidget::InitializeAbilityEntry(
 	AbilitySpecHandle = InSpecHandle;
 	ObservedAbility = nullptr;
 	ObservedCooldownTags.Reset();
+	bHasValidTargetForObservedAbility = true;
 
 	RefreshFromAbility();
 	BindListeners();
@@ -62,10 +66,9 @@ void UNexusAbilityEntryWidget::BindCooldownListeners()
 		FOnGameplayEffectTagCountChanged& TagEvent =
 			ObservedASC->RegisterGameplayTagEvent(CooldownTag, EGameplayTagEventType::NewOrRemoved);
 
-		FDelegateHandle Handle = TagEvent.AddUObject(
+		const FDelegateHandle Handle = TagEvent.AddUObject(
 			this,
-			&UNexusAbilityEntryWidget::HandleCooldownGameplayTagChanged
-		);
+			&UNexusAbilityEntryWidget::HandleCooldownGameplayTagChanged);
 
 		CooldownTagEventHandles.Add(Handle);
 	}
@@ -107,9 +110,14 @@ void UNexusAbilityEntryWidget::UpdateAbilityBGColor(bool bIsActive) const
 
 void UNexusAbilityEntryWidget::BindListeners()
 {
+	if (!ObservedAbility)
+	{
+		return;
+	}
+
 	BindCooldownListeners();
 	UpdateAbilityActiveState();
-	
+	UpdateTargetRequirementState();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -120,22 +128,19 @@ void UNexusAbilityEntryWidget::BindListeners()
 				this,
 				&UNexusAbilityEntryWidget::UpdateAbilityActiveState,
 				ActiveStateRefreshRate,
-				true
-			);
+				true);
 		}
-		if (ObservedAbility->bRequiresValidTarget)
+
+		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
+
+		if (DoesAbilityNeedValidTarget())
 		{
-			UpdateTargetRequirementState();
-			if (!World->GetTimerManager().IsTimerActive(TargetStateTimerHandle))
-			{
-				World->GetTimerManager().SetTimer(
-					TargetStateTimerHandle,
-					this,
-					&UNexusAbilityEntryWidget::UpdateTargetRequirementState,
-					TargetStateRefreshRate,
-					true
-				);
-			}
+			World->GetTimerManager().SetTimer(
+				TargetStateTimerHandle,
+				this,
+				&UNexusAbilityEntryWidget::UpdateTargetRequirementState,
+				TargetStateRefreshRate,
+				true);
 		}
 	}
 }
@@ -150,42 +155,65 @@ void UNexusAbilityEntryWidget::UnbindListeners()
 		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
 
+	bHasValidTargetForObservedAbility = true;
+
 	if (TargetRequiredOverlay)
 	{
 		TargetRequiredOverlay->SetVisibility(ESlateVisibility::Hidden);
 	}
 }
 
-
 void UNexusAbilityEntryWidget::HandleCooldownGameplayTagChanged(const FGameplayTag GameplayTag, int32 NewCount)
 {
 	UpdateCooldownProgress();
 }
 
-
 void UNexusAbilityEntryWidget::RefreshFromAbility()
 {
 	if (!ObservedASC || !AbilitySpecHandle.IsValid())
 	{
+		ObservedAbility = nullptr;
 		ResetCooldownVisuals();
+		UpdateAbilityBGColor(false);
+
+		if (TargetRequiredOverlay)
+		{
+			TargetRequiredOverlay->SetVisibility(ESlateVisibility::Hidden);
+		}
 		return;
 	}
 
 	bool bIsInstance = false;
 	const UGameplayAbility* BaseAbility =
-		UAbilitySystemBlueprintLibrary::GetGameplayAbilityFromSpecHandle(ObservedASC, AbilitySpecHandle, bIsInstance);
+		UAbilitySystemBlueprintLibrary::GetGameplayAbilityFromSpecHandle(
+			ObservedASC,
+			AbilitySpecHandle,
+			bIsInstance);
 
 	ObservedAbility = Cast<UNexusGameplayAbility>(BaseAbility);
 
 	if (!ObservedAbility)
 	{
 		ResetCooldownVisuals();
+		UpdateAbilityBGColor(false);
+
+		if (TargetRequiredOverlay)
+		{
+			TargetRequiredOverlay->SetVisibility(ESlateVisibility::Hidden);
+		}
 		return;
 	}
 
 	if (AbilityIcon)
 	{
-		AbilityIcon->SetBrushFromTexture(ObservedAbility->AbilityInfo->AbilityIcon);
+		if (ObservedAbility->AbilityInfo && ObservedAbility->AbilityInfo->AbilityIcon)
+		{
+			AbilityIcon->SetBrushFromTexture(ObservedAbility->AbilityInfo->AbilityIcon);
+		}
+		else
+		{
+			AbilityIcon->SetBrushFromTexture(nullptr);
+		}
 	}
 
 	ResetCooldownVisuals();
@@ -202,7 +230,6 @@ void UNexusAbilityEntryWidget::UpdateCooldownProgress()
 	{
 		return;
 	}
-	
 
 	const float TimeRemaining = ObservedAbility->GetCooldownTimeRemaining();
 	if (TimeRemaining > 0.f)
@@ -220,6 +247,7 @@ void UNexusAbilityEntryWidget::UpdateCooldownProgress()
 				CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
 			}
 		}
+
 		BP_UpdateCooldownVisuals(TimeRemaining);
 
 		if (UWorld* World = GetWorld())
@@ -231,8 +259,7 @@ void UNexusAbilityEntryWidget::UpdateCooldownProgress()
 					this,
 					&UNexusAbilityEntryWidget::UpdateCooldownProgress,
 					CooldownRefreshRate,
-					true
-				);
+					true);
 			}
 		}
 	}
@@ -261,51 +288,69 @@ bool UNexusAbilityEntryWidget::IsObservedAbilityActive() const
 	{
 		return false;
 	}
-	
+
 	return AbilitySpec->IsActive();
 }
 
 bool UNexusAbilityEntryWidget::DoesAbilityNeedValidTarget() const
 {
-	return ObservedAbility && ObservedAbility->bRequiresValidTarget;
+	return IsValid(ObservedAbility) && ObservedAbility->bRequiresValidTarget;
 }
 
-bool UNexusAbilityEntryWidget::HasLocalValidTarget() const
+bool UNexusAbilityEntryWidget::IsLocalTargetUsableForObservedAbility() const
 {
-	APawn* ObservedPawn = Cast<APawn>(ObservedActor);
+	if (!ObservedAbility)
+	{
+		return false;
+	}
+
+	if (!DoesAbilityNeedValidTarget())
+	{
+		return true;
+	}
+
+	const APawn* ObservedPawn = Cast<APawn>(ObservedActor);
 	if (!IsValid(ObservedPawn))
 	{
 		return false;
 	}
 
-	ANexusPlayerController* PC = Cast<ANexusPlayerController>(ObservedPawn->GetController());
-	if (!IsValid(PC))
+	const ANexusPlayerController* PC = Cast<ANexusPlayerController>(ObservedPawn->GetController());
+	const ANexusCharacterBase* SourceCharacter = Cast<ANexusCharacterBase>(ObservedPawn);
+
+	if (!IsValid(PC) || !IsValid(SourceCharacter))
 	{
 		return false;
 	}
 
-	return PC->HasValidTarget();
+	ANexusCharacterBase* UsableTarget = nullptr;
+	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+		PC,
+		SourceCharacter,
+		ObservedAbility,
+		UsableTarget);
 }
 
 void UNexusAbilityEntryWidget::UpdateTargetRequirementState()
 {
-	bool bHasValidTarget = true;
+	bool bHasValidTargetForAbility = true;
 
-	if (DoesAbilityNeedValidTarget())
+	if (ObservedAbility)
 	{
-		bHasValidTarget = HasLocalValidTarget();
+		bHasValidTargetForAbility = IsLocalTargetUsableForObservedAbility();
 	}
 
-	bHasValidTargetForObservedAbility = bHasValidTarget;
+	bHasValidTargetForObservedAbility = bHasValidTargetForAbility;
 
 	if (TargetRequiredOverlay)
 	{
-		TargetRequiredOverlay->SetVisibility(bHasValidTarget
-			? ESlateVisibility::Hidden
-			: ESlateVisibility::Visible);
+		TargetRequiredOverlay->SetVisibility(
+			bHasValidTargetForAbility
+				? ESlateVisibility::Hidden
+				: ESlateVisibility::Visible);
 	}
 
-	BP_OnTargetRequirementChanged(bHasValidTarget);
+	BP_OnTargetRequirementChanged(bHasValidTargetForAbility);
 }
 
 void UNexusAbilityEntryWidget::UpdateAbilityActiveState()

@@ -48,7 +48,6 @@ void ANexusMinionBase::StartHitscan()
 
 	AlreadyHitCharactersInWindow.Reset();
 
-	// Immediate first trace so the hit window begins right away.
 	Hitscan();
 
 	GetWorld()->GetTimerManager().SetTimer(
@@ -126,11 +125,6 @@ void ANexusMinionBase::DoHitscan()
 	}
 }
 
-void ANexusMinionBase::InitializeCombatLoadout()
-{
-	Super::InitializeCombatLoadout();
-}
-
 void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID)
 {
 	if (!HasAuthority())
@@ -141,6 +135,8 @@ void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InTargetCapturePoint
 	TargetCapturePoint = InTargetCapturePoint;
 	SetTeamID(InTeamID);
 	SetCurrentCapturePoint(nullptr);
+
+	RebuildCombatLoadout();
 
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{

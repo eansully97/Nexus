@@ -5,8 +5,6 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Ability
 	// -------------------------
-	UE_DEFINE_GAMEPLAY_TAG(Ability_Reactive_Parry, "Ability.Reactive.Parry");
-	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Movement_Dash, "Ability.Movement.Dash");
@@ -63,7 +61,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Explode, "Event.Projectile.Explode");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Projectile_Spawn, "Event.Projectile.Spawn");
 
-	UE_DEFINE_GAMEPLAY_TAG(Event_Parry_Activated, "Event.Parry.Activated");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Deflect_Triggered, "Event.Deflect.Triggered");
 
 	// -------------------------
 	// GameplayCue
@@ -75,6 +73,8 @@ namespace NexusGameplayTags
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_Dash_Activate, "GameplayCue.Ability.Dash.Activate");
 	
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_ShadowStrike_Activate, "GameplayCue.Ability.ShadowStrike.Activate");
+	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_ArcanePulse_Activate, "GameplayCue.Ability.ArcanePulse.Activate");
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Projectile_Spawned, "GameplayCue.Projectile.Spawned");
@@ -83,7 +83,10 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Input
 	// -------------------------
-	UE_DEFINE_GAMEPLAY_TAG(Input_Ability_Dash, "Input.Ability.Dash");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Ability_Slot1, "Input.Ability.Slot1");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Ability_Slot2, "Input.Ability.Slot2");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Ability_Slot3, "Input.Ability.Slot3");
+	
 	
 	UE_DEFINE_GAMEPLAY_TAG(Input_Action_Jump, "Input.Action.Jump");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Action_Move, "Input.Action.Move");
@@ -102,7 +105,6 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Status_Stunned, "Status.Stunned");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Status_Defense_Deflecting, "Status.Defense.Deflecting");
-	UE_DEFINE_GAMEPLAY_TAG(Status_Defense_DeflectWindow, "Status.Defense.DeflectWindow");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Status_Objective_Capturing, "Status.Objective.Capturing");
 	

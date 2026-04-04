@@ -1,11 +1,12 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "NexusGameplayAbility.h"
 #include "GA_ShadowStrike.generated.h"
 
-
 class UAbilityTask_PlayMontageAndWait;
+class UAbilityTask_WaitDelay;
 class ANexusCharacterBase;
 
 UCLASS()
@@ -38,9 +39,6 @@ protected:
 	float TraceDistance = 5000.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
-	float MaxRange = 1500.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
 	float Damage = 15.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
@@ -55,6 +53,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
 	bool bStopTargetMovement = true;
 
+	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
+	float TeleportDelay = 0.15f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
+	FGameplayTag ShadowStrikeCueTag;
+
 	UPROPERTY(Transient)
 	TObjectPtr<ANexusCharacterBase> CachedSourceCharacter;
 
@@ -62,21 +66,32 @@ protected:
 	TObjectPtr<ANexusCharacterBase> CachedTargetCharacter;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask = nullptr;
 
 	UPROPERTY(Transient)
-	bool bCommittedSuccessfully = false;
+	TObjectPtr<UAbilityTask_WaitDelay> TeleportDelayTask = nullptr;
 
-	ANexusCharacterBase* GetSourceCharacter() const;
+	UPROPERTY(Transient)
+	FVector CachedTeleportLocation = FVector::ZeroVector;
 
-	bool IsValidTarget(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const;
-	bool IsInRange(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const;
-	bool FindTeleportLocation(FVector& OutLocation, FRotator& OutRotation) const;
+	UPROPERTY(Transient)
+	bool bStrikeExecuted = false;
+
+	UPROPERTY(Transient)
+	bool bCueActive = false;
+
+	bool FindTeleportLocation(FVector& OutLocation) const;
 	void TeleportAndFaceTarget(const FVector& TeleportLocation);
-
 	void StunTarget() const;
 	void DamageTarget() const;
+
+	void StartShadowStrikeCue();
+	void StopShadowStrikeCue();
+	void ExecuteShadowStrike();
 	void Cleanup();
+
+	UFUNCTION()
+	void OnTeleportDelayFinished();
 
 	UFUNCTION()
 	void OnMontageCompleted();

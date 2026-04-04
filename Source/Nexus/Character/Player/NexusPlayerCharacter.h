@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "InputActionValue.h"
+#include "Nexus/NexusAbilityGrant.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "NexusPlayerCharacter.generated.h"
 
@@ -9,6 +10,7 @@ class UNexusEnhancedInputComponent;
 class UCharacterClassInfo;
 class UNexusWeaponsManager;
 class UCharacterClassComponent;
+class UNexusGameplayAbility;
 
 UCLASS()
 class NEXUS_API ANexusPlayerCharacter : public ANexusCharacterBase
@@ -26,14 +28,14 @@ public:
 	void Input_JumpReleased(const FInputActionValue& Value);
 
 	bool ShouldBlockNativeInput() const;
-	
+
 	UFUNCTION(BlueprintPure)
 	bool CanAcceptGameplayInput() const;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<class UInputMappingContext> DefaultMappingContext;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<class UInputConfigInfo> InputConfig;
 
 protected:
@@ -42,9 +44,11 @@ protected:
 	virtual void ApplyDeathState_Server() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual TArray<FNexusAbilityGrant> GetClassAbilitiesToGrant() const override;
 
 	const FGameplayAbilitySpec* FindAbilitySpecByInputTag(FGameplayTag InputTag) const;
 	bool TrySendAbilityGameplayEvent(FGameplayTag InputTag);
+	bool TryResolveUsableTargetForAbility(const UNexusGameplayAbility* AbilityCDO, ANexusCharacterBase*& OutTargetCharacter) const;
 
 	UFUNCTION(Server, Reliable)
 	void Server_SendAbilityTargetedEvent(FGameplayTag InputTag, AActor* TargetActor);
@@ -56,7 +60,7 @@ protected:
 	void Multicast_SetPitch(float InPitch);
 
 	UPROPERTY(VisibleDefaultsOnly, Replicated, BlueprintReadOnly)
-	float PitchOffset;
+	float PitchOffset = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Respawn")
 	float RespawnTime = 6.f;

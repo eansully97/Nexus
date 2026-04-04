@@ -1,7 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "NexusWeaponsManager.h"
+﻿#include "NexusWeaponsManager.h"
 
 #include "CharacterClassComponent.h"
 #include "Camera/CameraComponent.h"
@@ -13,13 +10,11 @@
 #include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
 
-
 UNexusWeaponsManager::UNexusWeaponsManager()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 	OwnerCharacter = Cast<ANexusPlayerCharacter>(GetOwner());
-	
 }
 
 void UNexusWeaponsManager::BeginPlay()
@@ -92,7 +87,6 @@ void UNexusWeaponsManager::AttachEquippedWeapon()
 	}
 }
 
-
 void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip)
 {
 	ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(GetOwner());
@@ -137,7 +131,7 @@ void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEqui
 
 	const TArray<FGameplayAbilitySpecHandle> GrantedHandles = Character->GrantAbilitySet(
 		ENexusAbilitySource::Weapon,
-		EquippedWeapon->WeaponConfig.AbilitiesToGrant,
+		EquippedWeapon->WeaponConfig.AbilityGrants,
 		EquippedWeapon);
 
 	UE_LOG(LogTemp, Warning,
@@ -152,7 +146,7 @@ void UNexusWeaponsManager::SetEquippedWeaponProperties()
 	{
 		return;
 	}
-	
+
 	OwnerCharacter->GetMesh()->SetAnimInstanceClass(EquippedWeapon->WeaponConfig.AnimInstanceClass);
 	OwnerCharacter->GetCharacterMovement()->bOrientRotationToMovement = false;
 	OwnerCharacter->GetCharacterMovement()->bUseControllerDesiredRotation = true;

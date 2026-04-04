@@ -10,12 +10,11 @@
 #include "Nexus/Components/NexusEnhancedInputComponent.h"
 #include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/Controller/NexusPlayerController.h"
-#include "Nexus/DataAssets/AbilityInfo.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 #include "Nexus/GameMode/NexusGameMode.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
-
 
 ANexusPlayerCharacter::ANexusPlayerCharacter()
 {
@@ -41,18 +40,29 @@ void ANexusPlayerCharacter::InitializeFromPlayerState()
 	Super::InitializeFromPlayerState();
 
 	ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
-	if (!PS) return;
+	if (!PS)
+	{
+		return;
+	}
+
+	if (ClassComponent)
+	{
+		ClassComponent->ApplyClassFromPlayerState(PS);
+	}
 
 	PS->ApplyPersistentCombatProfileToCharacter(this);
 
 	if (HasAuthority() && WeaponsManager && PS->GetCharacterClassInfo())
 	{
-		WeaponsManager->Equip(
-			PS->GetCharacterClassInfo()->WeaponClassToEquip
-		);
-
+		WeaponsManager->Equip(PS->GetCharacterClassInfo()->WeaponClassToEquip);
 		PS->TryApplyPersistentCooldownsToCharacter(this);
 	}
+}
+
+TArray<FNexusAbilityGrant> ANexusPlayerCharacter::GetClassAbilitiesToGrant() const
+{
+	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	return PS ? PS->GetClassAbilityGrants() : TArray<FNexusAbilityGrant>();
 }
 
 void ANexusPlayerCharacter::ApplyTeamVisuals() const
@@ -111,7 +121,7 @@ void ANexusPlayerCharacter::ApplyDeathState_Server()
 void ANexusPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (PC)
 	{
@@ -130,7 +140,6 @@ void ANexusPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 	UNexusEnhancedInputComponent* NexusInput = CastChecked<UNexusEnhancedInputComponent>(PlayerInputComponent);
 	check(InputConfig);
-	
 
 	NexusInput->BindNativeAction(InputConfig, NexusGameplayTags::Input_Action_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move);
 	NexusInput->BindNativeAction(InputConfig, NexusGameplayTags::Input_Action_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look);
@@ -143,7 +152,7 @@ void ANexusPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 void ANexusPlayerCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, PitchOffset)
+	DOREPLIFETIME(ThisClass, PitchOffset);
 }
 
 bool ANexusPlayerCharacter::ShouldBlockNativeInput() const
@@ -196,55 +205,39 @@ void ANexusPlayerCharacter::Input_AbilityReleased(FGameplayTag InputTag)
 	}
 }
 
+bool ANexusPlayerCharacter::TryResolveUsableTargetForAbility(
+	const UNexusGameplayAbility* AbilityCDO,
+	ANexusCharacterBase*& OutTargetCharacter) const
+{
+	ANexusPlayerController* PC = Cast<ANexusPlayerController>(GetController());
+	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+		PC,
+		this,
+		AbilityCDO,
+		OutTargetCharacter);
+}
+
 bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
 {
-	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputTag(InputTag);
-	if (!Spec)
+	const UNexusAbilitySystemComponent* NexusASC = Cast<UNexusAbilitySystemComponent>(AbilitySystemComponent);
+	if (!NexusASC)
 	{
 		return false;
 	}
 
-	const UNexusGameplayAbility* AbilityCDO = Cast<UNexusGameplayAbility>(Spec->Ability);
-	if (!AbilityCDO)
+	const UNexusGameplayAbility* AbilityCDO = NexusASC->FindNexusAbilityCDOByInputTag(InputTag);
+	if (!AbilityCDO || !AbilityCDO->bActivateByEvent)
 	{
 		return false;
 	}
 
-	if (!AbilityCDO->bActivateByEvent)
+	ANexusCharacterBase* TargetCharacter = nullptr;
+	if (!TryResolveUsableTargetForAbility(AbilityCDO, TargetCharacter))
 	{
-		return false;
+		return true;
 	}
 
-	AActor* TargetActor = nullptr;
-
-	if (AbilityCDO->bRequiresValidTarget)
-	{
-		ANexusPlayerController* PC = Cast<ANexusPlayerController>(GetController());
-		if (!IsValid(PC))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: no player controller"));
-			return true;
-		}
-
-		if (!PC->HasValidTarget())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: no valid target"));
-			return true;
-		}
-
-		TargetActor = PC->GetCurrentTargetedCharacter();
-
-		UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent Target=%s"),
-			*GetNameSafe(TargetActor));
-
-		if (!IsValid(TargetActor))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TrySendAbilityGameplayEvent FAIL: targeted actor invalid"));
-			return true;
-		}
-	}
-
-	Server_SendAbilityTargetedEvent(InputTag, TargetActor);
+	Server_SendAbilityTargetedEvent(InputTag, TargetCharacter);
 	return true;
 }
 
@@ -252,18 +245,13 @@ void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(
 	FGameplayTag InputTag,
 	AActor* TargetActor)
 {
-	if (!AbilitySystemComponent)
+	const UNexusAbilitySystemComponent* NexusASC = Cast<UNexusAbilitySystemComponent>(AbilitySystemComponent);
+	if (!NexusASC)
 	{
 		return;
 	}
 
-	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputTag(InputTag);
-	if (!Spec)
-	{
-		return;
-	}
-
-	const UNexusGameplayAbility* AbilityCDO = Cast<UNexusGameplayAbility>(Spec->Ability);
+	const UNexusGameplayAbility* AbilityCDO = NexusASC->FindNexusAbilityCDOByInputTag(InputTag);
 	if (!AbilityCDO || !AbilityCDO->bActivateByEvent)
 	{
 		return;
@@ -275,36 +263,30 @@ void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(
 		return;
 	}
 
-	FGameplayEventData Payload;
-	Payload.EventTag = EventTag;
-	Payload.Instigator = this;
-	Payload.Target = TargetActor;
-	Payload.OptionalObject = TargetActor;
+	ANexusCharacterBase* TargetCharacter = Cast<ANexusCharacterBase>(TargetActor);
+	if (!UNexusAbilityFunctionLibrary::IsAbilityTargetUsable(AbilityCDO, this, TargetCharacter))
+	{
+		if (AbilityCDO->bRequiresValidTarget)
+		{
+			return;
+		}
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		TargetCharacter = nullptr;
+		TargetActor = nullptr;
+	}
+
+	UNexusAbilityFunctionLibrary::SendTargetedGameplayEventToActor(
 		this,
 		EventTag,
-		Payload);
+		TargetActor,
+		TargetActor);
 }
 
 const FGameplayAbilitySpec* ANexusPlayerCharacter::FindAbilitySpecByInputTag(FGameplayTag InputTag) const
 {
-	if (!AbilitySystemComponent || !InputTag.IsValid())
-	{
-		return nullptr;
-	}
-
-	for (const FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
-	{
-		if (Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
-		{
-			return &Spec;
-		}
-	}
-
-	return nullptr;
+	const UNexusAbilitySystemComponent* NexusASC = Cast<UNexusAbilitySystemComponent>(AbilitySystemComponent);
+	return NexusASC ? NexusASC->FindAbilitySpecByInputTag(InputTag) : nullptr;
 }
-
 
 UCharacterClassInfo* ANexusPlayerCharacter::GetClassInfo()
 {
@@ -318,9 +300,12 @@ void ANexusPlayerCharacter::Input_Move(const FInputActionValue& Value)
 	{
 		return;
 	}
-	
+
 	const FVector2D InputAxis = Value.Get<FVector2D>();
-	if (!Controller) return;
+	if (!Controller)
+	{
+		return;
+	}
 
 	const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
 	const FVector Forward = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
@@ -332,10 +317,18 @@ void ANexusPlayerCharacter::Input_Move(const FInputActionValue& Value)
 
 void ANexusPlayerCharacter::Input_Look(const FInputActionValue& Value)
 {
-	const FVector2D LookAxis = Value.Get<FVector2D>();
+	if (!Controller)
+	{
+		return;
+	}
 
-	AddControllerYawInput(LookAxis.X);
-	AddControllerPitchInput(LookAxis.Y);
+	const FVector2D LookAxis = Value.Get<FVector2D>();
+	const ANexusPlayerController* NexusPC = Cast<ANexusPlayerController>(Controller);
+	const float AppliedSensitivity = NexusPC ? NexusPC->LookSensitivity : 1.f;
+
+	AddControllerYawInput(LookAxis.X * AppliedSensitivity);
+	AddControllerPitchInput(LookAxis.Y * AppliedSensitivity);
+
 	const float Pitch = GetControlRotation().Pitch;
 	Server_SetPitch(Pitch);
 }
@@ -350,14 +343,13 @@ void ANexusPlayerCharacter::Multicast_SetPitch_Implementation(float InPitch)
 	PitchOffset = InPitch;
 }
 
-
 void ANexusPlayerCharacter::Input_JumpPressed(const FInputActionValue& Value)
 {
 	if (ShouldBlockNativeInput())
 	{
 		return;
 	}
-	
+
 	Jump();
 }
 

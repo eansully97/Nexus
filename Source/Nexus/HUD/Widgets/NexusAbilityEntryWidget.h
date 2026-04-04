@@ -6,7 +6,6 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "NexusAbilityEntryWidget.generated.h"
 
-
 class UNexusGameplayAbility;
 class UAbilitySystemComponent;
 class UTextBlock;
@@ -29,12 +28,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Abilities")
 	TObjectPtr<AActor> ObservedActor = nullptr;
-	
 
 	FGameplayTagContainer ObservedCooldownTags;
-
 	TArray<FDelegateHandle> CooldownTagEventHandles;
-	
+
 	UFUNCTION()
 	void HandleCooldownGameplayTagChanged(const FGameplayTag GameplayTag, int32 NewCount);
 
@@ -105,7 +102,7 @@ protected:
 
 	void UpdateTargetRequirementState();
 	bool DoesAbilityNeedValidTarget() const;
-	bool HasLocalValidTarget() const;
+	bool IsLocalTargetUsableForObservedAbility() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Abilities")
 	void BP_OnTargetRequirementChanged(bool bHasValidTarget);

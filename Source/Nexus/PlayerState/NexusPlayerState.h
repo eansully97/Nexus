@@ -3,12 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "GameplayTagContainer.h"
+#include "Nexus/NexusAbilityGrant.h"
 #include "Nexus/NexusEnumTypes.h"
 #include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "NexusPlayerState.generated.h"
 
 class ANexusCharacterBase;
-class UNexusGameplayAbility;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerProfileChanged);
 
@@ -20,7 +20,6 @@ struct FNexusPersistentCooldown
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FGameplayTag CooldownTag;
 
-	// Absolute server world time when this cooldown expires.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ExpireWorldTimeSeconds = 0.f;
 };
@@ -32,9 +31,6 @@ class NEXUS_API ANexusPlayerState : public APlayerState
 
 public:
 	ANexusPlayerState();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<TSubclassOf<UNexusGameplayAbility>> BaseAbilities;
 
 protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -94,8 +90,8 @@ public:
 	void ApplyPersistentCombatProfileToCharacter(ANexusCharacterBase* Character);
 	void TryApplyPersistentCooldownsToCharacter(ANexusCharacterBase* Character);
 
-	TArray<TSubclassOf<UNexusGameplayAbility>> GetClassAbilityList() const;
-	TArray<TSubclassOf<UNexusGameplayAbility>> GetWeaponAbilityList() const;
+	TArray<FNexusAbilityGrant> GetWeaponAbilityGrants() const;
+	TArray<FNexusAbilityGrant> GetClassAbilityGrants() const;
 
 public:
 	UPROPERTY(BlueprintAssignable, Category="Events")

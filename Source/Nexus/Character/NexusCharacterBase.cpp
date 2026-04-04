@@ -1,16 +1,17 @@
 #include "NexusCharacterBase.h"
 
-#include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AIController.h"
-#include "GameplayCueFunctionLibrary.h"
+#include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "GameplayCueFunctionLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/NexusGameplayTags.h"
-#include "Nexus/DataAssets/AbilityInfo.h"
 #include "Nexus/DataAssets/GameplayEffectClassSet.h"
+#include "Nexus/FunctionLibraries/NexusCombatFunctionLibrary.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
@@ -68,7 +69,6 @@ void ANexusCharacterBase::OnRep_Controller()
 	InitializeAbilityActorInfo();
 }
 
-
 void ANexusCharacterBase::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
@@ -106,9 +106,27 @@ void ANexusCharacterBase::InitializeFromPlayerState()
 
 void ANexusCharacterBase::InitializeCombatLoadout()
 {
-	if (BaseAbilities.Num() > 0)
+	RebuildCombatLoadout();
+}
+
+TArray<FNexusAbilityGrant> ANexusCharacterBase::GetClassAbilitiesToGrant() const
+{
+	return {};
+}
+
+void ANexusCharacterBase::RebuildCombatLoadout()
+{
+	if (!HasAuthority())
 	{
-		GrantAbilitySet(ENexusAbilitySource::Base, BaseAbilities);
+		return;
+	}
+
+	ClearAbilitySet(ENexusAbilitySource::Class);
+
+	const TArray<FNexusAbilityGrant> ClassAbilityGrants = GetClassAbilitiesToGrant();
+	if (ClassAbilityGrants.Num() > 0)
+	{
+		GrantAbilitySet(ENexusAbilitySource::Class, ClassAbilityGrants);
 	}
 }
 
@@ -147,8 +165,6 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
 
-	TArray<ANexusCharacterBase*> HitCharacters;
-
 	const bool bHit = UKismetSystemLibrary::SphereTraceMultiForObjects(
 		GetWorld(),
 		StartLocation,
@@ -161,48 +177,23 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 		RawHitResults,
 		true,
 		FLinearColor::Red,
-	FLinearColor::Green,
-	1.f
+		FLinearColor::Green,
+		1.f
 	);
 
 	if (!bHit)
 	{
-		return HitCharacters;
+		return {};
 	}
 
-	for (const FHitResult& Hit : RawHitResults)
-	{
-		ANexusCharacterBase* HitCharacter = Cast<ANexusCharacterBase>(Hit.GetActor());
-		if (!IsValid(HitCharacter) || HitCharacter->GetIsDead())
-		{
-			continue;
-		}
-
-		if (HitCharacter->GetTeamID() == GetTeamID())
-		{
-			continue;
-		}
-
-		if (!HitCharacters.Contains(HitCharacter))
-		{
-			HitCharacters.Add(HitCharacter);
-			OutValidHitResults.Add(Hit);
-		}
-	}
+	TArray<ANexusCharacterBase*> HitCharacters;
+	UNexusCombatFunctionLibrary::FilterHitResultsToLivingEnemyCharacters(
+		this,
+		RawHitResults,
+		HitCharacters,
+		OutValidHitResults);
 
 	return HitCharacters;
-}
-
-void ANexusCharacterBase::RebuildCombatLoadoutFromPlayerState()
-{
-	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
-	if (!HasAuthority() || !PS)
-	{
-		return;
-	}
-
-	ClearAbilitySet(ENexusAbilitySource::Class);
-	GrantAbilitySet(ENexusAbilitySource::Class, PS->GetClassAbilityList());
 }
 
 void ANexusCharacterBase::ApplyGameplayEffectSpecsToTarget(
@@ -300,15 +291,11 @@ void ANexusCharacterBase::ApplyStunToTarget(ANexusCharacterBase* Target, float D
 
 void ANexusCharacterBase::ApplyDamageToTarget(ANexusCharacterBase* Target, float Damage)
 {
-	if (!EffectSet || !IsValid(Target))
+	if (!EffectSet || !IsValid(Target) || Damage <= 0.f)
 	{
 		return;
 	}
 
-	if (Damage <= 0.f)
-	{
-		return;
-	}
 	const float EffectDamage = -Damage;
 
 	ApplySetByCallerEffectToTarget(
@@ -319,80 +306,54 @@ void ANexusCharacterBase::ApplyDamageToTarget(ANexusCharacterBase* Target, float
 	);
 }
 
-bool ANexusCharacterBase::CanParryMeleeHit(
-	ANexusCharacterBase* Attacker) const
+bool ANexusCharacterBase::CanParryMeleeHit(ANexusCharacterBase* Attacker) const
 {
-	if (!IsValid(Attacker) || GetIsDead())
-	{
-		return false;
-	}
-
-	if (!AbilitySystemComponent)
-	{
-		return false;
-	}
-
-	if (!AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Defense_Deflecting))
-	{
-		return false;
-	}
-
-	if (!AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Defense_DeflectWindow))
-	{
-		return false;
-	}
-
-	if (!IsAttackWithinDeflectAngle(Attacker, 0.2f))
-	{
-		return false;
-	}
-
-	return true;
+	return UNexusCombatFunctionLibrary::CanCharacterDeflectMeleeHit(
+		this,
+		Attacker,
+		DeflectMinDotThreshold,
+		NexusGameplayTags::Status_Defense_Deflecting);
 }
 
 bool ANexusCharacterBase::IsAttackWithinDeflectAngle(
 	ANexusCharacterBase* Attacker,
 	float MinDotThreshold) const
 {
-	if (!IsValid(Attacker))
-	{
-		return false;
-	}
-
-	const FVector DefenderForward = GetActorForwardVector().GetSafeNormal();
-	const FVector ToAttacker = (Attacker->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-
-	const float Dot = FVector::DotProduct(DefenderForward, ToAttacker);
-	return Dot >= MinDotThreshold;
+	return UNexusCombatFunctionLibrary::IsWithinFacingAngle(this, Attacker, MinDotThreshold);
 }
 
-bool ANexusCharacterBase::SendParryGameplayEvent(
+void ANexusCharacterBase::HandleSuccessfulDeflect(
 	ANexusCharacterBase* Attacker,
 	const FHitResult& HitResult)
 {
-	if (!HasAuthority() || !IsValid(Attacker) || !AbilitySystemComponent)
+	if (!HasAuthority() || !IsValid(Attacker) || Attacker == this)
 	{
-		return false;
+		return;
 	}
 
-	const FGameplayTag ParryEventTag = NexusGameplayTags::Event_Parry_Activated;
+	ApplyStunToTarget(Attacker, DeflectStunDuration);
 
-	FGameplayEventData Payload;
-	Payload.EventTag = ParryEventTag;
-	Payload.Instigator = Attacker;
-	Payload.Target = this;
-	Payload.TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(HitResult);
-	Payload.OptionalObject = Attacker;
+	if (bPlayDeflectCueOnDefender)
+	{
+		const FGameplayCueParameters DefenderParams =
+			UNexusCombatFunctionLibrary::MakeImpactCueParameters(HitResult, Attacker, Attacker);
 
-	const int32 NumTriggered = AbilitySystemComponent->HandleGameplayEvent(ParryEventTag, &Payload);
+		UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
+			this,
+			NexusGameplayTags::GameplayCue_Damage_Deflected,
+			DefenderParams);
+	}
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("HandleGameplayEvent Defender=%s Attacker=%s TriggeredAbilities=%d"),
-		*GetNameSafe(this),
-		*GetNameSafe(Attacker),
-		NumTriggered);
+	if (bPlayDeflectCueOnAttacker)
+	{
+		const FGameplayCueParameters AttackerParams =
+			UNexusCombatFunctionLibrary::MakeImpactCueParameters(HitResult, this, this);
 
-	return NumTriggered > 0;
+		UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
+			Attacker,
+			NexusGameplayTags::GameplayCue_Damage_Deflected,
+			AttackerParams);
+	}
 }
 
 ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
@@ -405,25 +366,21 @@ ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
 		return ENexusHitResolutionResult::None;
 	}
 
-	if (!IsValid(Target) || Target->GetIsDead())
+	if (!UNexusCombatFunctionLibrary::IsCharacterAlive(Target))
 	{
 		return ENexusHitResolutionResult::None;
 	}
 
 	if (Target->CanParryMeleeHit(this))
 	{
-		if (Target->SendParryGameplayEvent(this, HitResult))
-		{
-			return ENexusHitResolutionResult::Parried;
-		}
+		Target->HandleSuccessfulDeflect(this, HitResult);
+		return ENexusHitResolutionResult::Parried;
 	}
 
 	ApplyDamageToTarget(Target, Damage);
 
-	FGameplayCueParameters Parameters;
-	Parameters.Location = HitResult.ImpactPoint;
-	Parameters.Normal = HitResult.ImpactNormal;
-	Parameters.Instigator = this;
+	const FGameplayCueParameters Parameters =
+		UNexusCombatFunctionLibrary::MakeImpactCueParameters(HitResult, this, this);
 
 	UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
 		Target,
@@ -486,7 +443,6 @@ void ANexusCharacterBase::HandleTeamChanged()
 
 void ANexusCharacterBase::ApplyTeamVisuals() const
 {
-	// Intentionally empty in base.
 }
 
 bool ANexusCharacterBase::IsFriendlyTo(AActor* OtherActor) const
@@ -536,10 +492,7 @@ void ANexusCharacterBase::Die()
 	bIsDead = true;
 
 	ApplyDeathState_Server();
-
-	// Fire the animation trigger once from the server
 	Multicast_DeathAnimation();
-
 	HandleDeathStateChanged();
 	ForceNetUpdate();
 }
@@ -660,6 +613,7 @@ void ANexusCharacterBase::EnterRagdoll()
 		MeshComp->SetSimulatePhysics(true);
 		MeshComp->bBlendPhysics = true;
 	}
+
 	SetLifeSpan(4.f);
 }
 
@@ -667,14 +621,12 @@ TArray<FGameplayAbilitySpecHandle>& ANexusCharacterBase::GetHandleArrayForSource
 {
 	switch (Source)
 	{
-	case ENexusAbilitySource::Base:
-		return BaseAbilityHandles;
 	case ENexusAbilitySource::Class:
 		return ClassAbilityHandles;
 	case ENexusAbilitySource::Weapon:
 		return WeaponAbilityHandles;
 	default:
-		return BaseAbilityHandles;
+		return ClassAbilityHandles;
 	}
 }
 
@@ -724,7 +676,7 @@ bool ANexusCharacterBase::HasGrantedAbilityTag(const FGameplayTag& AbilityTag) c
 
 TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 	ENexusAbilitySource Source,
-	const TArray<TSubclassOf<UNexusGameplayAbility>>& AbilitiesToGrant,
+	const TArray<FNexusAbilityGrant>& AbilityGrants,
 	UObject* SourceObject)
 {
 	TArray<FGameplayAbilitySpecHandle> NewHandles;
@@ -736,8 +688,9 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 
 	TArray<FGameplayAbilitySpecHandle>& HandleArray = GetHandleArrayForSource(Source);
 
-	for (const TSubclassOf<UNexusGameplayAbility>& AbilityClass : AbilitiesToGrant)
+	for (const FNexusAbilityGrant& Grant : AbilityGrants)
 	{
+		const TSubclassOf<UNexusGameplayAbility> AbilityClass = Grant.Ability;
 		if (!AbilityClass || HasGrantedAbilityClass(AbilityClass))
 		{
 			continue;
@@ -751,13 +704,13 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 
 		FGameplayAbilitySpec Spec(
 			AbilityClass,
-			1,
+			FMath::Max(1, Grant.AbilityLevel),
 			INDEX_NONE,
 			SourceObject ? SourceObject : this);
 
-		if (AbilityCDO->AbilityBindConfig.InputTag.IsValid())
+		if (Grant.InputTag.IsValid())
 		{
-			Spec.GetDynamicSpecSourceTags().AddTag(AbilityCDO->AbilityBindConfig.InputTag);
+			Spec.GetDynamicSpecSourceTags().AddTag(Grant.InputTag);
 		}
 
 		const FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(Spec);
@@ -811,7 +764,6 @@ void ANexusCharacterBase::ClearAbilitySet(ENexusAbilitySource Source)
 
 void ANexusCharacterBase::ClearAllGrantedAbilitySets()
 {
-	ClearAbilitySet(ENexusAbilitySource::Base);
 	ClearAbilitySet(ENexusAbilitySource::Class);
 	ClearAbilitySet(ENexusAbilitySource::Weapon);
 }

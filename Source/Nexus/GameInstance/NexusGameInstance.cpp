@@ -216,6 +216,7 @@ void UNexusGameInstance::HandleFindSessionsComplete(
 	{
 		CachedSearchResults.Add(SessionResults[Index]);
 		AvailableSessions.Add(BuildSessionInfo(SessionResults[Index], Index));
+		UE_LOG(LogTemp, Log, TEXT("AvailableSessions populated: %d"), AvailableSessions.Num());
 	}
 
 	OnSessionSearchResultsUpdated.Broadcast();
@@ -233,6 +234,14 @@ void UNexusGameInstance::HandleFindSessionsComplete(
 		HostGame(DefaultPublicConnections, DefaultMatchType);
 		return;
 	}
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("HandleFindSessionsComplete: Success=%s Results=%d"),
+		bWasSuccessful ? TEXT("true") : TEXT("false"),
+		SessionResults.Num()
+	);
 
 	SetFrontendState(ENexusFrontendState::PlayMenu);
 }

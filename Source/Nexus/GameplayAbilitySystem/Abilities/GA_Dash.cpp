@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 
 UGA_Dash::UGA_Dash()
 {
@@ -113,17 +114,36 @@ void UGA_Dash::AddDashCue()
 		return;
 	}
 
-	FGameplayEffectContextHandle EffectContext = MakeEffectContext(CurrentSpecHandle, CurrentActorInfo);
-	FGameplayCueParameters CueParameters;
-	CueParameters.Instigator = GetAvatarActorFromActorInfo();
-	CueParameters.EffectCauser = GetAvatarActorFromActorInfo();
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (!IsValid(AvatarActor))
+	{
+		return;
+	}
 
-	K2_AddGameplayCue(DashCueTag, EffectContext, true);
+	UNexusAbilityFunctionLibrary::AddGameplayCueToActor(
+		AvatarActor,
+		DashCueTag,
+		AvatarActor,
+		AvatarActor,
+		this);
 }
 
 void UGA_Dash::RemoveDashCue()
 {
-	
+	if (!DashCueTag.IsValid())
+	{
+		return;
+	}
+
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (!IsValid(AvatarActor))
+	{
+		return;
+	}
+
+	UNexusAbilityFunctionLibrary::RemoveGameplayCueFromActor(
+		AvatarActor,
+		DashCueTag);
 }
 
 void UGA_Dash::CleanupTasks()

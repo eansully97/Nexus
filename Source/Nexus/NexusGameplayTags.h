@@ -12,8 +12,6 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Ability
 	// -------------------------
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Reactive_Parry);
-	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Movement_Dash);
@@ -72,7 +70,7 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Explode);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Projectile_Spawn);
 
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Parry_Activated);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Deflect_Triggered);
 
 	// -------------------------
 	// GameplayCue
@@ -84,6 +82,8 @@ namespace NexusGameplayTags
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_Dash_Activate);
 	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_ShadowStrike_Activate);
+	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_ArcanePulse_Activate);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Projectile_Spawned);
@@ -92,7 +92,9 @@ namespace NexusGameplayTags
 	// -------------------------
 	// Input
 	// -------------------------
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Ability_Dash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Ability_Slot1);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Ability_Slot2);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Ability_Slot3);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Jump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Move);
@@ -111,7 +113,6 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Stunned);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Defense_Deflecting);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Defense_DeflectWindow);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Objective_Capturing);
 	

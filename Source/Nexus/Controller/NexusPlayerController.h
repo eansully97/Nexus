@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
@@ -8,23 +6,24 @@
 #include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "NexusPlayerController.generated.h"
 
-
-class UCameraComponent;
+class ACameraActor;
 class UInputMappingContext;
+class UUserWidget;
+class ANexusCharacterBase;
+class UNexusGameplayAbility;
 
-/**
- * 
- */
 UCLASS()
 class NEXUS_API ANexusPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
 public:
-	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sensitivity")
+	float LookSensitivity{1.f};
+
 	void ShowWaitingCameraForTeam();
 	void ReturnToPawnCamera();
-	
+
 	UFUNCTION(Client, Reliable)
 	void ClientShowWaitingCamera();
 
@@ -43,9 +42,9 @@ protected:
 	virtual void OnRep_PlayerState() override;
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IMC")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="IMC")
 	TArray<UInputMappingContext*> DefaultMappingContexts;
-	
+
 public:
 	void RefreshHUDBindings();
 
@@ -54,7 +53,7 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void HideClassSelectUI();
-	
+
 	void HandleClassSelectStateChanged();
 
 	UFUNCTION(Server, Reliable)
@@ -62,15 +61,15 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_SetReady(bool bInReady);
-	
+
 private:
-	UPROPERTY(BlueprintReadOnly, Replicated, Category="Crosshair", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(BlueprintReadOnly, Replicated, Category="Crosshair", meta=(AllowPrivateAccess="true"))
 	FHitResult CurrentCrosshairHit;
 
-	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<ANexusCharacterBase> CurrentTargetedCharacter = nullptr;
 
-	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(BlueprintReadOnly, Category="Targeting", meta=(AllowPrivateAccess="true"))
 	bool bHasValidTarget = false;
 
 	UPROPERTY(EditDefaultsOnly, Category="UI")
@@ -78,24 +77,29 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ClassSelectWidget;
-	
+
 public:
 	UFUNCTION(BlueprintCallable, Category="Crosshair")
 	bool GetCrosshairHitResult(FHitResult& OutHit, float TraceDistance) const;
 
-	UFUNCTION(BlueprintPure)
-	FHitResult GetCurrentCrosshairHit();
+	UFUNCTION(BlueprintPure, Category="Crosshair")
+	FHitResult GetCurrentCrosshairHit() const;
 
 	UFUNCTION(BlueprintPure, Category="Targeting")
 	ANexusCharacterBase* GetCurrentTargetedCharacter() const { return CurrentTargetedCharacter; }
 
-	UFUNCTION(BlueprintPure, Category="Crosshair")
+	UFUNCTION(BlueprintPure, Category="Targeting")
 	bool HasValidTarget() const { return bHasValidTarget; }
 
 	UFUNCTION(BlueprintPure, Category="Targeting")
 	bool IsValidTargetCharacter(ANexusCharacterBase* SourceCharacter, ANexusCharacterBase* TargetCharacter) const;
-	
+
+	UFUNCTION(BlueprintPure, Category="Targeting")
+	bool HasUsableTargetForAbility(const UNexusGameplayAbility* Ability) const;
+
+	UFUNCTION(BlueprintPure, Category="Targeting")
+	ANexusCharacterBase* GetUsableTargetForAbility(const UNexusGameplayAbility* Ability) const;
+
 private:
 	void UpdateTargetedCharacter();
-
 };

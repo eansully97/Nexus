@@ -1,14 +1,11 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "Nexus/Weapons/NexusWeaponBase.h"
+#include "Nexus/NexusAbilityGrant.h"
 #include "CharacterClassInfo.generated.h"
 
 class ANexusWeaponBase;
-class UNexusGameplayAbility;
 
 UENUM(BlueprintType)
 enum class ECharacterClassName : uint8
@@ -19,20 +16,18 @@ enum class ECharacterClassName : uint8
 	Rogue
 };
 
-/**
- * 
- */
 UCLASS()
 class NEXUS_API UCharacterClassInfo : public UDataAsset
 {
 	GENERATED_BODY()
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AbilitySystem")
-	ECharacterClassName CharacterClassName;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AbilitySystem")
-	TArray<TSubclassOf<UNexusGameplayAbility>> StartingAbilities;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapons")
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	ECharacterClassName CharacterClassName;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TArray<FNexusAbilityGrant> ClassAbilityGrants;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<ANexusWeaponBase> WeaponClassToEquip;
 };

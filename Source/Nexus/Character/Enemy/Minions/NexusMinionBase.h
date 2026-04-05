@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Nexus/NexusAbilityGrant.h"
 #include "Nexus/Character/Enemy/NexusEnemyBase.h"
 #include "NexusMinionBase.generated.h"
 
@@ -26,6 +27,12 @@ public:
 	void Hitscan();
 	void DoHitscan();
 
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	bool RotateTowardsCurrentTargetForHitscan(float DeltaTime);
+
+	UFUNCTION(BlueprintPure, Category="Combat")
+	bool IsFacingActorForHitscan(const AActor* ActorToFace) const;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ANexusCharacterBase>> AlreadyHitCharactersInWindow;
 
@@ -40,6 +47,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float HitscanInterval = 0.03f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat|Facing")
+	float AttackTurnRateDegreesPerSecond = 720.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat|Facing", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float AttackFacingDotThreshold = 0.75f;
+
 	UFUNCTION(BlueprintCallable)
 	void InitializeMinion(ANexusCapturePoint* InTargetCapturePoint, ENexusTeamID InTeamID);
 
@@ -51,8 +64,14 @@ protected:
 	virtual void ApplyTeamVisuals() const override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Loadout")
-	TArray<TSubclassOf<UNexusGameplayAbility>> DefaultClassAbilities;
+	virtual void InitializeCombatLoadout() override;
+	virtual TArray<FNexusAbilityGrant> GetClassAbilitiesToGrant() const override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
+	TArray<FNexusAbilityGrant> MinionAbilityGrants;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
+	bool bMinionLoadoutInitialized = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Objective")
 	ANexusCapturePoint* TargetCapturePoint = nullptr;

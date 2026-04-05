@@ -11,6 +11,7 @@ class UInputMappingContext;
 class UUserWidget;
 class ANexusCharacterBase;
 class UNexusGameplayAbility;
+class ANexusWeaponBase;
 
 UCLASS()
 class NEXUS_API ANexusPlayerController : public APlayerController
@@ -31,7 +32,6 @@ public:
 	void ClientReturnToPawnCamera();
 
 	ACameraActor* GetWaitingCameraActor(ENexusTeamID InTeamID);
-
 	ENexusTeamID GetTeamID() const;
 
 protected:
@@ -58,6 +58,12 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_SelectClass(UCharacterClassInfo* InClassInfo);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SelectWeapon(TSubclassOf<ANexusWeaponBase> InWeaponClass);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetSelectedClassAbilities(const TArray<FNexusAbilityGrant>& InAbilityGrants);
 
 	UFUNCTION(Server, Reliable)
 	void Server_SetReady(bool bInReady);

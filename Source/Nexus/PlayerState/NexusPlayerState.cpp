@@ -1,10 +1,12 @@
-﻿#include "NexusPlayerState.h"
+﻿#include "Nexus/PlayerState/NexusPlayerState.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/Character/Player/NexusPlayerCharacter.h"
+#include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/DataAssets/CostAndCooldownConfig.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
@@ -40,6 +42,28 @@ namespace
 		ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 		return true;
 	}
+
+	bool AreEquivalentAbilityGrants(const FNexusAbilityGrant& A, const FNexusAbilityGrant& B)
+	{
+		return A.Ability == B.Ability
+			&& A.AbilityLevel == B.AbilityLevel
+			&& A.InputTag == B.InputTag;
+	}
+
+	bool ContainsEquivalentGrant(
+		const TArray<FNexusAbilityGrant>& Grants,
+		const FNexusAbilityGrant& Candidate)
+	{
+		for (const FNexusAbilityGrant& Existing : Grants)
+		{
+			if (AreEquivalentAbilityGrants(Existing, Candidate))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 ANexusPlayerState::ANexusPlayerState()
@@ -51,7 +75,7 @@ void ANexusPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, TeamID);
-	DOREPLIFETIME(ThisClass, CharacterClassInfo);
+	DOREPLIFETIME(ThisClass, CurrentLoadout);
 	DOREPLIFETIME(ThisClass, bSelectionLockedIn);
 }
 
@@ -72,12 +96,51 @@ void ANexusPlayerState::SetTeamID(ENexusTeamID NewTeamID)
 
 void ANexusPlayerState::SetCharacterClassInfo(UCharacterClassInfo* InInfo)
 {
-	if (CharacterClassInfo == InInfo)
+	if (CurrentLoadout.SelectedClass == InInfo)
 	{
 		return;
 	}
 
-	CharacterClassInfo = InInfo;
+	CurrentLoadout.SelectedClass = InInfo;
+	NormalizeCurrentLoadout();
+
+	if (HasAuthority())
+	{
+		HandleProfileChanged();
+	}
+}
+
+void ANexusPlayerState::SetSelectedWeaponClass(TSubclassOf<ANexusWeaponBase> InWeaponClass)
+{
+	if (CurrentLoadout.SelectedWeapon == InWeaponClass)
+	{
+		return;
+	}
+
+	CurrentLoadout.SelectedWeapon = InWeaponClass;
+	NormalizeCurrentLoadout();
+
+	if (HasAuthority())
+	{
+		HandleProfileChanged();
+	}
+}
+
+void ANexusPlayerState::SetSelectedClassAbilityGrants(const TArray<FNexusAbilityGrant>& InAbilityGrants)
+{
+	CurrentLoadout.SelectedClassAbilityGrants = InAbilityGrants;
+	NormalizeCurrentLoadout();
+
+	if (HasAuthority())
+	{
+		HandleProfileChanged();
+	}
+}
+
+void ANexusPlayerState::SetLoadout(const FNexusLoadout& InLoadout)
+{
+	CurrentLoadout = InLoadout;
+	NormalizeCurrentLoadout();
 
 	if (HasAuthority())
 	{
@@ -105,8 +168,9 @@ void ANexusPlayerState::OnRep_TeamID()
 	HandleProfileChanged();
 }
 
-void ANexusPlayerState::OnRep_CharacterClassInfo()
+void ANexusPlayerState::OnRep_CurrentLoadout()
 {
+	NormalizeCurrentLoadout();
 	HandleProfileChanged();
 }
 
@@ -120,15 +184,61 @@ void ANexusPlayerState::HandleProfileChanged()
 	OnPlayerProfileChanged.Broadcast();
 }
 
+void ANexusPlayerState::NormalizeCurrentLoadout()
+{
+	if (!CurrentLoadout.SelectedClass)
+	{
+		CurrentLoadout.SelectedWeapon = nullptr;
+		CurrentLoadout.SelectedClassAbilityGrants.Reset();
+		return;
+	}
+
+	if (!CurrentLoadout.SelectedWeapon ||
+		!CurrentLoadout.SelectedClass->IsWeaponAllowed(CurrentLoadout.SelectedWeapon))
+	{
+		CurrentLoadout.SelectedWeapon = CurrentLoadout.SelectedClass->GetResolvedDefaultWeaponClass();
+	}
+
+	TArray<FNexusAbilityGrant> FilteredSelections;
+
+	for (const FNexusAbilityGrant& SelectedGrant : CurrentLoadout.SelectedClassAbilityGrants)
+	{
+		if (!SelectedGrant.Ability)
+		{
+			continue;
+		}
+
+		if (!ContainsEquivalentGrant(CurrentLoadout.SelectedClass->SelectableClassAbilityGrants, SelectedGrant))
+		{
+			continue;
+		}
+
+		if (ContainsEquivalentGrant(FilteredSelections, SelectedGrant))
+		{
+			continue;
+		}
+
+		FilteredSelections.Add(SelectedGrant);
+	}
+
+	CurrentLoadout.SelectedClassAbilityGrants = MoveTemp(FilteredSelections);
+}
+
+bool ANexusPlayerState::IsWeaponAllowedForCurrentClass(TSubclassOf<ANexusWeaponBase> WeaponClass) const
+{
+	return CurrentLoadout.SelectedClass
+		&& CurrentLoadout.SelectedClass->IsWeaponAllowed(WeaponClass);
+}
+
 TArray<FNexusAbilityGrant> ANexusPlayerState::GetWeaponAbilityGrants() const
 {
-	if (!CharacterClassInfo || !CharacterClassInfo->WeaponClassToEquip)
+	if (!CurrentLoadout.SelectedWeapon)
 	{
 		return {};
 	}
 
 	const ANexusWeaponBase* WeaponCDO =
-		CharacterClassInfo->WeaponClassToEquip->GetDefaultObject<ANexusWeaponBase>();
+		CurrentLoadout.SelectedWeapon->GetDefaultObject<ANexusWeaponBase>();
 
 	if (!WeaponCDO)
 	{
@@ -140,7 +250,17 @@ TArray<FNexusAbilityGrant> ANexusPlayerState::GetWeaponAbilityGrants() const
 
 TArray<FNexusAbilityGrant> ANexusPlayerState::GetClassAbilityGrants() const
 {
-	return CharacterClassInfo ? CharacterClassInfo->ClassAbilityGrants : TArray<FNexusAbilityGrant>();
+	TArray<FNexusAbilityGrant> Result;
+
+	if (!CurrentLoadout.SelectedClass)
+	{
+		return Result;
+	}
+
+	Result.Append(CurrentLoadout.SelectedClass->DefaultClassAbilityGrants);
+	Result.Append(CurrentLoadout.SelectedClassAbilityGrants);
+
+	return Result;
 }
 
 void ANexusPlayerState::CapturePersistentCombatStateFromCharacter(ANexusCharacterBase* Character)

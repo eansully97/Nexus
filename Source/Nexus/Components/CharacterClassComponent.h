@@ -1,12 +1,11 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "CharacterClassComponent.generated.h"
-class UCharacterClassInfo;
 
+class UCharacterClassInfo;
+class ANexusPlayerState;
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class NEXUS_API UCharacterClassComponent : public UActorComponent
@@ -16,10 +15,15 @@ class NEXUS_API UCharacterClassComponent : public UActorComponent
 public:
 	UCharacterClassComponent();
 
-	void ApplyClassFromPlayerState(class ANexusPlayerState* PS);
+	void ApplyClassFromPlayerState(ANexusPlayerState* PS);
+	void ApplyClassInfo(UCharacterClassInfo* InClassInfo);
 	void ResetAppliedClass();
 
+	UFUNCTION(BlueprintPure, Category="Class")
 	UCharacterClassInfo* GetAppliedClassInfo() const { return AppliedClassInfo; }
+
+	UFUNCTION(BlueprintPure, Category="Class")
+	bool HasAppliedClass() const { return bClassApplied && AppliedClassInfo != nullptr; }
 
 protected:
 	UPROPERTY()

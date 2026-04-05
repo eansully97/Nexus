@@ -1,20 +1,16 @@
-﻿#include "NexusWeaponsManager.h"
+﻿#include "Nexus/Components/NexusWeaponsManager.h"
 
-#include "CharacterClassComponent.h"
-#include "Camera/CameraComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
-#include "Nexus/DataAssets/CharacterClassInfo.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
 
 UNexusWeaponsManager::UNexusWeaponsManager()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
-	OwnerCharacter = Cast<ANexusPlayerCharacter>(GetOwner());
 }
 
 void UNexusWeaponsManager::BeginPlay()
@@ -26,12 +22,97 @@ void UNexusWeaponsManager::BeginPlay()
 void UNexusWeaponsManager::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, EquippedWeapon)
+	DOREPLIFETIME(ThisClass, EquippedWeapon);
 }
 
 void UNexusWeaponsManager::OnRep_EquippedWeapon()
 {
+	if (EquippedWeapon)
+	{
+		ApplyEquippedWeaponState();
+	}
+	else
+	{
+		SetUnarmedProperties();
+	}
+}
+
+void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip)
+{
+	EquipOrSwap(WeaponClassToEquip);
+}
+
+void UNexusWeaponsManager::EquipOrSwap(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip)
+{
+	ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(GetOwner());
+	if (!Character || !Character->HasAuthority() || !WeaponClassToEquip)
+	{
+		return;
+	}
+
+	if (EquippedWeapon && EquippedWeapon->GetClass() == WeaponClassToEquip)
+	{
+		OwnerCharacter = Character;
+		ApplyEquippedWeaponState();
+		return;
+	}
+
+	UnequipCurrentWeapon();
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FTransform SpawnTransform = Character->GetActorTransform();
+
+	ANexusWeaponBase* Weapon = World->SpawnActorDeferred<ANexusWeaponBase>(
+		WeaponClassToEquip,
+		SpawnTransform,
+		Character,
+		Character,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+	);
+
+	if (!Weapon)
+	{
+		return;
+	}
+
+	Weapon->SetOwnerCharacter(Character);
+	Weapon->FinishSpawning(SpawnTransform);
+
+	EquippedWeapon = Weapon;
+	OwnerCharacter = Character;
+
 	ApplyEquippedWeaponState();
+
+	Character->GrantAbilitySet(
+		ENexusAbilitySource::Weapon,
+		EquippedWeapon->WeaponConfig.AbilityGrants,
+		EquippedWeapon);
+}
+
+void UNexusWeaponsManager::UnequipCurrentWeapon()
+{
+	ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(GetOwner());
+	if (!Character || !Character->HasAuthority())
+	{
+		return;
+	}
+
+	Character->ClearAbilitySet(ENexusAbilitySource::Weapon);
+
+	ANexusWeaponBase* OldWeapon = EquippedWeapon;
+	EquippedWeapon = nullptr;
+
+	if (OldWeapon)
+	{
+		OldWeapon->Destroy();
+	}
+
+	SetUnarmedProperties();
 }
 
 void UNexusWeaponsManager::ApplyEquippedWeaponState()
@@ -87,67 +168,41 @@ void UNexusWeaponsManager::AttachEquippedWeapon()
 	}
 }
 
-void UNexusWeaponsManager::Equip(TSubclassOf<ANexusWeaponBase> WeaponClassToEquip)
-{
-	ANexusPlayerCharacter* Character = Cast<ANexusPlayerCharacter>(GetOwner());
-	if (!Character || !Character->HasAuthority() || !WeaponClassToEquip)
-	{
-		return;
-	}
-
-	if (EquippedWeapon)
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const FTransform SpawnTransform = Character->GetActorTransform();
-
-	ANexusWeaponBase* Weapon = World->SpawnActorDeferred<ANexusWeaponBase>(
-		WeaponClassToEquip,
-		SpawnTransform,
-		Character,
-		Character,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-	);
-
-	if (!Weapon)
-	{
-		return;
-	}
-
-	Weapon->SetOwner(Character);
-	Weapon->FinishSpawning(SpawnTransform);
-
-	EquippedWeapon = Weapon;
-	OwnerCharacter = Character;
-
-	ApplyEquippedWeaponState();
-
-	const TArray<FGameplayAbilitySpecHandle> GrantedHandles = Character->GrantAbilitySet(
-		ENexusAbilitySource::Weapon,
-		EquippedWeapon->WeaponConfig.AbilityGrants,
-		EquippedWeapon);
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("Equip Weapon=%s GrantedWeaponAbilities=%d"),
-		*GetNameSafe(EquippedWeapon),
-		GrantedHandles.Num());
-}
-
-void UNexusWeaponsManager::SetEquippedWeaponProperties()
+void UNexusWeaponsManager::SetEquippedWeaponProperties() const
 {
 	if (!OwnerCharacter || !EquippedWeapon)
 	{
 		return;
 	}
 
-	OwnerCharacter->GetMesh()->SetAnimInstanceClass(EquippedWeapon->WeaponConfig.AnimInstanceClass);
-	OwnerCharacter->GetCharacterMovement()->bOrientRotationToMovement = false;
-	OwnerCharacter->GetCharacterMovement()->bUseControllerDesiredRotation = true;
+	if (EquippedWeapon->WeaponConfig.AnimInstanceClass)
+	{
+		OwnerCharacter->GetMesh()->SetAnimInstanceClass(EquippedWeapon->WeaponConfig.AnimInstanceClass);
+	}
+	else
+	{
+		OwnerCharacter->GetMesh()->SetAnimInstanceClass(DefaultAnimInstanceClass);
+	}
+
+	if (UCharacterMovementComponent* MoveComp = OwnerCharacter->GetCharacterMovement())
+	{
+		MoveComp->bOrientRotationToMovement = false;
+		MoveComp->bUseControllerDesiredRotation = true;
+	}
+}
+
+void UNexusWeaponsManager::SetUnarmedProperties() const
+{
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	OwnerCharacter->GetMesh()->SetAnimInstanceClass(DefaultAnimInstanceClass);
+
+	if (UCharacterMovementComponent* MoveComp = OwnerCharacter->GetCharacterMovement())
+	{
+		MoveComp->bOrientRotationToMovement = true;
+		MoveComp->bUseControllerDesiredRotation = false;
+	}
 }

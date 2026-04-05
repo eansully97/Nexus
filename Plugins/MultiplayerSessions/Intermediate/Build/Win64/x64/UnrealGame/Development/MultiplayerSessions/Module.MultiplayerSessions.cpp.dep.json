@@ -132,7 +132,9 @@
             "c:\\program files\\epic games\\ue_5.7\\engine\\plugins\\online\\onlinesubsystem\\source\\public\\onlinesubsystempackage.h",
             "c:\\program files\\epic games\\ue_5.7\\engine\\source\\runtime\\signalprocessing\\public\\dsp\\multithreadedpatching.h",
             "c:\\unrealprojects\\nexus\\plugins\\multiplayersessions\\source\\multiplayersessions\\source\\multiplayersessions\\private\\multiplayersessions.cpp",
-            "c:\\unrealprojects\\nexus\\plugins\\multiplayersessions\\source\\multiplayersessions\\source\\multiplayersessions\\public\\multiplayersessions.h"
+            "c:\\unrealprojects\\nexus\\plugins\\multiplayersessions\\source\\multiplayersessions\\source\\multiplayersessions\\public\\multiplayersessions.h",
+            "c:\\unrealprojects\\nexus\\plugins\\multiplayersessions\\source\\multiplayersessions\\source\\multiplayersessions\\private\\multiplayersessionssubsystem.cpp",
+            "c:\\program files\\epic games\\ue_5.7\\engine\\plugins\\online\\onlinebase\\source\\public\\online\\onlinesessionnames.h"
         ],
         "ImportedModules": [],
         "ImportedHeaderUnits": []

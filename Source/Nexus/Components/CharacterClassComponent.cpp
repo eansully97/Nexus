@@ -1,11 +1,6 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "CharacterClassComponent.h"
-
+﻿#include "Nexus/Components/CharacterClassComponent.h"
 
 #include "Nexus/PlayerState/NexusPlayerState.h"
-
 
 UCharacterClassComponent::UCharacterClassComponent()
 {
@@ -15,18 +10,24 @@ UCharacterClassComponent::UCharacterClassComponent()
 
 void UCharacterClassComponent::ApplyClassFromPlayerState(ANexusPlayerState* PS)
 {
-	if (!PS || !PS->GetCharacterClassInfo())
+	if (!PS)
+	{
+		ResetAppliedClass();
+		return;
+	}
+
+	ApplyClassInfo(PS->GetCharacterClassInfo());
+}
+
+void UCharacterClassComponent::ApplyClassInfo(UCharacterClassInfo* InClassInfo)
+{
+	if (bClassApplied && AppliedClassInfo == InClassInfo)
 	{
 		return;
 	}
 
-	if (bClassApplied && AppliedClassInfo == PS->GetCharacterClassInfo())
-	{
-		return;
-	}
-
-	AppliedClassInfo = PS->GetCharacterClassInfo();
-	bClassApplied = true;
+	AppliedClassInfo = InClassInfo;
+	bClassApplied = AppliedClassInfo != nullptr;
 }
 
 void UCharacterClassComponent::ResetAppliedClass()

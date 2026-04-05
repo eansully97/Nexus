@@ -139,6 +139,7 @@ void ANexusGameMode::HandleMatchHasStarted()
 		if (NexusPC)
 		{
 			NexusPC->ClientReturnToPawnCamera();
+			NexusPC->HideClassSelectUI();
 		}
 	}
 }

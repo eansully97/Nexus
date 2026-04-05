@@ -1,4 +1,4 @@
-﻿#include "NexusPlayerController.h"
+﻿#include "Nexus/Controller/NexusPlayerController.h"
 
 #include "Camera/CameraActor.h"
 #include "EnhancedInputSubsystems.h"
@@ -13,6 +13,7 @@
 #include "Nexus/HUD/NexusHUD.h"
 #include "Nexus/HUD/Widgets/NexusMainHUDWidget.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
+#include "Nexus/Weapons/NexusWeaponBase.h"
 
 ACameraActor* ANexusPlayerController::GetWaitingCameraActor(ENexusTeamID InTeamID)
 {
@@ -210,40 +211,39 @@ ANexusCharacterBase* ANexusPlayerController::GetUsableTargetForAbility(const UNe
 	ANexusCharacterBase* OutTarget = nullptr;
 	const ANexusCharacterBase* SourceCharacter = Cast<ANexusCharacterBase>(GetPawn());
 
-	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
+	UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
 		this,
 		SourceCharacter,
 		Ability,
-		OutTarget)
-		? OutTarget
-		: nullptr;
+		OutTarget);
+
+	return OutTarget;
 }
 
 void ANexusPlayerController::ShowWaitingCameraForTeam()
 {
-	ACameraActor* WaitingCamera = GetWaitingCameraActor(GetTeamID());
-	if (!WaitingCamera)
+	if (!IsLocalController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ShowWaitingCameraForTeam: No waiting camera found for %s"), *GetName());
 		return;
 	}
 
-	SetControlRotation(WaitingCamera->GetActorRotation());
-	SetViewTargetWithBlend(WaitingCamera, 0.f);
+	if (ACameraActor* WaitingCamera = GetWaitingCameraActor(GetTeamID()))
+	{
+		SetViewTarget(WaitingCamera);
+	}
 }
 
 void ANexusPlayerController::ReturnToPawnCamera()
 {
-	APawn* ControlledPawn = GetPawn();
-	if (!ControlledPawn)
+	if (!IsLocalController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ReturnToPawnCamera: No pawn on %s"), *GetName());
 		return;
 	}
 
-	HideClassSelectUI();
-	SetControlRotation(ControlledPawn->GetActorRotation());
-	SetViewTargetWithBlend(ControlledPawn, 0.f);
+	if (GetPawn())
+	{
+		SetViewTarget(GetPawn());
+	}
 }
 
 void ANexusPlayerController::ClientShowWaitingCamera_Implementation()
@@ -294,7 +294,7 @@ void ANexusPlayerController::HideClassSelectUI()
 	SetInputMode(InputMode);
 }
 
-void ANexusPlayerController::Server_SelectClass_Implementation(UCharacterClassInfo* ClassInfo)
+void ANexusPlayerController::Server_SelectClass_Implementation(UCharacterClassInfo* InClassInfo)
 {
 	ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
 	ANexusGameMode* GM = GetWorld()->GetAuthGameMode<ANexusGameMode>();
@@ -304,12 +304,60 @@ void ANexusPlayerController::Server_SelectClass_Implementation(UCharacterClassIn
 		return;
 	}
 
-	if (!GM->IsValidClassChoice(ClassInfo))
+	if (!GM->IsValidClassChoice(InClassInfo))
 	{
 		return;
 	}
 
-	PS->SetCharacterClassInfo(ClassInfo);
+	PS->SetCharacterClassInfo(InClassInfo);
+	PS->SetSelectionLockedIn(false);
+
+	GM->RefreshReadyStatus();
+}
+
+void ANexusPlayerController::Server_SelectWeapon_Implementation(TSubclassOf<ANexusWeaponBase> InWeaponClass)
+{
+	ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	ANexusGameMode* GM = GetWorld()->GetAuthGameMode<ANexusGameMode>();
+
+	if (!PS || !GM || !GM->IsClassSelectionOpen())
+	{
+		return;
+	}
+
+	if (!PS->GetCharacterClassInfo())
+	{
+		return;
+	}
+
+	if (!PS->IsWeaponAllowedForCurrentClass(InWeaponClass))
+	{
+		return;
+	}
+
+	PS->SetSelectedWeaponClass(InWeaponClass);
+	PS->SetSelectionLockedIn(false);
+
+	GM->RefreshReadyStatus();
+}
+
+void ANexusPlayerController::Server_SetSelectedClassAbilities_Implementation(
+	const TArray<FNexusAbilityGrant>& InAbilityGrants)
+{
+	ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	ANexusGameMode* GM = GetWorld()->GetAuthGameMode<ANexusGameMode>();
+
+	if (!PS || !GM || !GM->IsClassSelectionOpen())
+	{
+		return;
+	}
+
+	if (!PS->GetCharacterClassInfo())
+	{
+		return;
+	}
+
+	PS->SetSelectedClassAbilityGrants(InAbilityGrants);
 	PS->SetSelectionLockedIn(false);
 
 	GM->RefreshReadyStatus();

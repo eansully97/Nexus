@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "GameplayTagContainer.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "NexusAbilityFunctionLibrary.generated.h"
@@ -10,6 +11,18 @@ class ANexusCharacterBase;
 class ANexusPlayerController;
 class UNexusAbilitySystemComponent;
 class UNexusGameplayAbility;
+
+USTRUCT(BlueprintType)
+struct FNexusAbilityTargetHit
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Nexus|Ability|Targeting")
+	TObjectPtr<AActor> TargetActor = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category="Nexus|Ability|Targeting")
+	FHitResult HitResult;
+};
 
 UCLASS()
 class NEXUS_API UNexusAbilityFunctionLibrary : public UBlueprintFunctionLibrary
@@ -39,6 +52,29 @@ public:
 		const FGameplayTag& EventTag,
 		AActor* TargetActor,
 		AActor* OptionalObject = nullptr);
+
+	static bool BuildTargetHitResultFromOrigin(
+		const AActor* TargetActor,
+		const FVector& Origin,
+		FHitResult& OutHitResult);
+
+	static bool HasLineOfSightToTarget(
+		const UObject* WorldContextObject,
+		const FVector& Origin,
+		const AActor* TargetActor,
+		ECollisionChannel TraceChannel = ECC_Visibility,
+		const AActor* ActorToIgnore = nullptr,
+		const AActor* AdditionalIgnoredActor = nullptr);
+
+	static bool QueryRadialEnemyCharacterTargets(
+		const UObject* WorldContextObject,
+		const FVector& Origin,
+		float Radius,
+		const ANexusCharacterBase* SourceCharacter,
+		TArray<FNexusAbilityTargetHit>& OutTargetHits,
+		bool bRequireLineOfSight = false,
+		ECollisionChannel LineOfSightTraceChannel = ECC_Visibility,
+		const AActor* AdditionalIgnoredActor = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability|GameplayCue")
 	static bool AddGameplayCueToActor(

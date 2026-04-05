@@ -29,6 +29,28 @@ void ANexusMinionBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(ThisClass, CurrentTarget);
 }
 
+void ANexusMinionBase::InitializeCombatLoadout()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	// PossessedBy() on the base may call this before InitializeMinion().
+	// For minions, wait until the server has assigned the capture point/team/setup data.
+	if (!bMinionLoadoutInitialized)
+	{
+		return;
+	}
+
+	Super::InitializeCombatLoadout();
+}
+
+TArray<FNexusAbilityGrant> ANexusMinionBase::GetClassAbilitiesToGrant() const
+{
+	return MinionAbilityGrants;
+}
+
 void ANexusMinionBase::OnRep_CurrentTarget()
 {
 	OnCombatStateChanged.Broadcast();
@@ -69,9 +91,86 @@ void ANexusMinionBase::EndHitscan()
 	AlreadyHitCharactersInWindow.Reset();
 }
 
+bool ANexusMinionBase::IsFacingActorForHitscan(const AActor* ActorToFace) const
+{
+	if (!ActorToFace)
+	{
+		return false;
+	}
+
+	FVector ToTarget = ActorToFace->GetActorLocation() - GetActorLocation();
+	ToTarget.Z = 0.f;
+
+	if (!ToTarget.Normalize())
+	{
+		return true;
+	}
+
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const float FacingDot = FVector::DotProduct(Forward, ToTarget);
+
+	return FacingDot >= AttackFacingDotThreshold;
+}
+
+bool ANexusMinionBase::RotateTowardsCurrentTargetForHitscan(float DeltaTime)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	ANexusCharacterBase* TargetCharacter = Cast<ANexusCharacterBase>(CurrentTarget);
+	if (!IsValid(TargetCharacter) || TargetCharacter == this || TargetCharacter->GetIsDead() || !IsEnemyTo(TargetCharacter))
+	{
+		return true;
+	}
+
+	FVector ToTarget = TargetCharacter->GetActorLocation() - GetActorLocation();
+	ToTarget.Z = 0.f;
+
+	if (!ToTarget.Normalize())
+	{
+		return true;
+	}
+
+	FRotator CurrentRotation = GetActorRotation();
+	CurrentRotation.Pitch = 0.f;
+	CurrentRotation.Roll = 0.f;
+
+	FRotator DesiredRotation = ToTarget.Rotation();
+	DesiredRotation.Pitch = 0.f;
+	DesiredRotation.Roll = 0.f;
+
+	const FRotator NewRotation = FMath::RInterpConstantTo(
+		CurrentRotation,
+		DesiredRotation,
+		FMath::Max(DeltaTime, KINDA_SMALL_NUMBER),
+		AttackTurnRateDegreesPerSecond
+	);
+
+	SetActorRotation(NewRotation);
+
+	if (Controller)
+	{
+		Controller->SetControlRotation(NewRotation);
+	}
+
+	return IsFacingActorForHitscan(TargetCharacter);
+}
+
 void ANexusMinionBase::Hitscan()
 {
 	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const float TurnDeltaTime =
+		HitscanInterval > 0.f
+			? HitscanInterval
+			: (GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.03f);
+
+	if (!RotateTowardsCurrentTargetForHitscan(TurnDeltaTime))
 	{
 		return;
 	}
@@ -136,6 +235,7 @@ void ANexusMinionBase::InitializeMinion(ANexusCapturePoint* InTargetCapturePoint
 	SetTeamID(InTeamID);
 	SetCurrentCapturePoint(nullptr);
 
+	bMinionLoadoutInitialized = true;
 	RebuildCombatLoadout();
 
 	if (AAIController* AI = Cast<AAIController>(GetController()))
@@ -348,7 +448,7 @@ AActor* ANexusMinionBase::FindBestTarget() const
 		if (!bAtCapturePoint)
 		{
 			const float Dot = FVector::DotProduct(Forward, ToTarget);
-			if (Dot < 0.34f)
+			if (Dot < -0.7f)
 			{
 				continue;
 			}

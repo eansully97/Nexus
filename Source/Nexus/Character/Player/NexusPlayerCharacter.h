@@ -40,6 +40,8 @@ public:
 
 protected:
 	virtual void InitializeFromPlayerState() override;
+	virtual void InitializeCombatLoadout() override;
+	virtual void RebuildCombatLoadoutPlayerOnly();
 	virtual void ApplyTeamVisuals() const override;
 	virtual void ApplyDeathState_Server() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

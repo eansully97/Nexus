@@ -1,9 +1,9 @@
-﻿#include "NexusPlayerCharacter.h"
+﻿#include "Nexus/Character/Player/NexusPlayerCharacter.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "EnhancedInputSubsystems.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Components/CharacterClassComponent.h"
@@ -15,6 +15,7 @@
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
+#include "Nexus/Weapons/NexusWeaponBase.h"
 
 ANexusPlayerCharacter::ANexusPlayerCharacter()
 {
@@ -50,13 +51,44 @@ void ANexusPlayerCharacter::InitializeFromPlayerState()
 		ClassComponent->ApplyClassFromPlayerState(PS);
 	}
 
-	PS->ApplyPersistentCombatProfileToCharacter(this);
-
-	if (HasAuthority() && WeaponsManager && PS->GetCharacterClassInfo())
+	if (HasAuthority())
 	{
-		WeaponsManager->Equip(PS->GetCharacterClassInfo()->WeaponClassToEquip);
-		PS->TryApplyPersistentCooldownsToCharacter(this);
+		PS->ApplyPersistentCombatProfileToCharacter(this);
 	}
+}
+
+void ANexusPlayerCharacter::InitializeCombatLoadout()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	RebuildCombatLoadoutPlayerOnly();
+}
+
+void ANexusPlayerCharacter::RebuildCombatLoadoutPlayerOnly()
+{
+	ClearAbilitySet(ENexusAbilitySource::Class);
+
+	if (WeaponsManager)
+	{
+		WeaponsManager->UnequipCurrentWeapon();
+	}
+
+	const TArray<FNexusAbilityGrant> ClassGrants = GetClassAbilitiesToGrant();
+	if (ClassGrants.Num() > 0)
+	{
+		GrantAbilitySet(ENexusAbilitySource::Class, ClassGrants, this);
+	}
+
+	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
+	if (PS && WeaponsManager && PS->GetSelectedWeaponClass())
+	{
+		WeaponsManager->EquipOrSwap(PS->GetSelectedWeaponClass());
+	}
+
+	OnCombatStateChanged.Broadcast();
 }
 
 TArray<FNexusAbilityGrant> ANexusPlayerCharacter::GetClassAbilitiesToGrant() const
@@ -209,50 +241,69 @@ bool ANexusPlayerCharacter::TryResolveUsableTargetForAbility(
 	const UNexusGameplayAbility* AbilityCDO,
 	ANexusCharacterBase*& OutTargetCharacter) const
 {
-	ANexusPlayerController* PC = Cast<ANexusPlayerController>(GetController());
-	return UNexusAbilityFunctionLibrary::TryGetUsableControllerTargetForAbility(
-		PC,
-		this,
-		AbilityCDO,
-		OutTargetCharacter);
+	OutTargetCharacter = nullptr;
+
+	if (!AbilityCDO)
+	{
+		return false;
+	}
+
+	const ANexusPlayerController* PC = Cast<ANexusPlayerController>(GetController());
+	if (!PC)
+	{
+		return false;
+	}
+
+	return PC->GetUsableTargetForAbility(AbilityCDO) != nullptr
+		? (OutTargetCharacter = PC->GetUsableTargetForAbility(AbilityCDO), true)
+		: false;
 }
 
 bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
 {
-	const UNexusAbilitySystemComponent* NexusASC = Cast<UNexusAbilitySystemComponent>(AbilitySystemComponent);
-	if (!NexusASC)
-	{
-		return false;
-	}
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputTag(InputTag);
+	const UNexusGameplayAbility* AbilityCDO = Spec ? Cast<UNexusGameplayAbility>(Spec->Ability) : nullptr;
 
-	const UNexusGameplayAbility* AbilityCDO = NexusASC->FindNexusAbilityCDOByInputTag(InputTag);
 	if (!AbilityCDO || !AbilityCDO->bActivateByEvent)
 	{
 		return false;
 	}
 
-	ANexusCharacterBase* TargetCharacter = nullptr;
-	if (!TryResolveUsableTargetForAbility(AbilityCDO, TargetCharacter))
+	const FGameplayTag EventTag = AbilityCDO->GetPrimaryActivationEventTag();
+	if (!EventTag.IsValid())
 	{
+		return false;
+	}
+
+	AActor* TargetActor = nullptr;
+
+	if (AbilityCDO->AbilityRequiresUsableTarget())
+	{
+		ANexusCharacterBase* TargetCharacter = nullptr;
+		if (!TryResolveUsableTargetForAbility(AbilityCDO, TargetCharacter))
+		{
+			return true;
+		}
+
+		TargetActor = TargetCharacter;
+		Server_SendAbilityTargetedEvent(InputTag, TargetActor);
 		return true;
 	}
 
-	Server_SendAbilityTargetedEvent(InputTag, TargetCharacter);
+	UNexusAbilityFunctionLibrary::SendTargetedGameplayEventToActor(
+		this,
+		EventTag,
+		nullptr,
+		nullptr);
+
 	return true;
 }
 
-void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(
-	FGameplayTag InputTag,
-	AActor* TargetActor)
+void ANexusPlayerCharacter::Server_SendAbilityTargetedEvent_Implementation(FGameplayTag InputTag, AActor* TargetActor)
 {
-	const UNexusAbilitySystemComponent* NexusASC = Cast<UNexusAbilitySystemComponent>(AbilitySystemComponent);
-	if (!NexusASC)
-	{
-		return;
-	}
-
-	const UNexusGameplayAbility* AbilityCDO = NexusASC->FindNexusAbilityCDOByInputTag(InputTag);
-	if (!AbilityCDO || !AbilityCDO->bActivateByEvent)
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputTag(InputTag);
+	const UNexusGameplayAbility* AbilityCDO = Spec ? Cast<UNexusGameplayAbility>(Spec->Ability) : nullptr;
+	if (!AbilityCDO)
 	{
 		return;
 	}

@@ -1,10 +1,9 @@
 ﻿#include "GA_ProjectileExplode.h"
 
 #include "Abilities/GameplayAbilityTargetTypes.h"
-#include "Engine/OverlapResult.h"
-#include "Engine/World.h"
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Character/NexusCharacterBase.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 
 UGA_ProjectileExplode::UGA_ProjectileExplode()
 {
@@ -36,6 +35,8 @@ void UGA_ProjectileExplode::ActivateAbility(
 	const FGameplayAbilityActivationInfo ActivationInfo,
 	const FGameplayEventData* TriggerEventData)
 {
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
 	if (!ActorInfo || !ActorInfo->IsNetAuthority())
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
@@ -47,15 +48,15 @@ void UGA_ProjectileExplode::ActivateAbility(
 		EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
 		return;
 	}
-	
-	FHitResult Hit;
-	if (TryExtractHitResult(*TriggerEventData, Hit))
-	{
-		const FVector ExplosionOrigin = Hit.ImpactPoint.IsNearlyZero()
-			? Hit.Location
-			: Hit.ImpactPoint;
 
-		ApplyExplosionAtLocation(ExplosionOrigin, *TriggerEventData, &Hit);
+	FHitResult DirectHit;
+	if (TryExtractHitResult(*TriggerEventData, DirectHit))
+	{
+		const FVector ExplosionOrigin = DirectHit.ImpactPoint.IsNearlyZero()
+			? DirectHit.Location
+			: DirectHit.ImpactPoint;
+
+		ApplyExplosionAtLocation(ExplosionOrigin, *TriggerEventData, &DirectHit);
 	}
 	else
 	{
@@ -75,7 +76,9 @@ void UGA_ProjectileExplode::ActivateAbility(
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
-bool UGA_ProjectileExplode::TryExtractHitResult(const FGameplayEventData& EventData, FHitResult& OutHit) const
+bool UGA_ProjectileExplode::TryExtractHitResult(
+	const FGameplayEventData& EventData,
+	FHitResult& OutHit) const
 {
 	for (int32 Index = 0; Index < EventData.TargetData.Num(); ++Index)
 	{
@@ -101,16 +104,19 @@ void UGA_ProjectileExplode::ApplyExplosionAtLocation(
 	const FGameplayEventData& EventData,
 	const FHitResult* DirectHit)
 {
-	UWorld* World = GetWorld();
-	if (!World)
+	const AActor* InstigatorActor = EventData.Instigator.Get();
+
+	ANexusCharacterBase* SourceCharacter =
+		Cast<ANexusCharacterBase>(const_cast<AActor*>(InstigatorActor));
+
+	if (!SourceCharacter)
 	{
-		return;
+		SourceCharacter = Cast<ANexusCharacterBase>(GetAvatarActorFromActorInfo());
 	}
 
-	AActor* SourceActor = const_cast<AActor*>(EventData.Instigator.Get());
-	if (!SourceActor)
+	if (!SourceCharacter)
 	{
-		SourceActor = GetAvatarActorFromActorInfo();
+		return;
 	}
 
 	const AActor* ProjectileActor = Cast<AActor>(EventData.OptionalObject.Get());
@@ -124,73 +130,72 @@ void UGA_ProjectileExplode::ApplyExplosionAtLocation(
 		return;
 	}
 
-	FCollisionObjectQueryParams ObjectQueryParams;
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_ProjectileExplode), false);
-	if (SourceActor)
-	{
-		QueryParams.AddIgnoredActor(SourceActor);
-	}
-	if (ProjectileActor)
-	{
-		QueryParams.AddIgnoredActor(ProjectileActor);
-	}
-
-	TArray<FOverlapResult> Overlaps;
-	World->OverlapMultiByObjectType(
-		Overlaps,
+	TArray<FNexusAbilityTargetHit> TargetHits;
+	UNexusAbilityFunctionLibrary::QueryRadialEnemyCharacterTargets(
+		this,
 		ExplosionOrigin,
-		FQuat::Identity,
-		ObjectQueryParams,
-		FCollisionShape::MakeSphere(ExplosionRadius),
-		QueryParams
-	);
-
-	TSet<AActor*> UniqueTargets;
+		ExplosionRadius,
+		SourceCharacter,
+		TargetHits,
+		false,
+		ECC_Visibility,
+		ProjectileActor);
 
 	if (DirectHit)
 	{
 		if (AActor* DirectHitActor = DirectHit->GetActor())
 		{
-			if (DirectHitActor != SourceActor)
+			bool bFoundExistingEntry = false;
+
+			for (FNexusAbilityTargetHit& TargetHit : TargetHits)
 			{
-				UniqueTargets.Add(DirectHitActor);
+				if (TargetHit.TargetActor == DirectHitActor)
+				{
+					TargetHit.HitResult = *DirectHit;
+					bFoundExistingEntry = true;
+					break;
+				}
+			}
+
+			if (!bFoundExistingEntry)
+			{
+				if (ANexusCharacterBase* DirectHitCharacter = Cast<ANexusCharacterBase>(DirectHitActor))
+				{
+					if (SourceCharacter->GetTeamID() != DirectHitCharacter->GetTeamID())
+					{
+						FNexusAbilityTargetHit DirectTargetHit;
+						DirectTargetHit.TargetActor = DirectHitActor;
+						DirectTargetHit.HitResult = *DirectHit;
+						TargetHits.Add(MoveTemp(DirectTargetHit));
+					}
+				}
 			}
 		}
 	}
 
-	for (const FOverlapResult& Overlap : Overlaps)
+	for (const FNexusAbilityTargetHit& TargetHit : TargetHits)
 	{
-		AActor* TargetActor = Overlap.GetActor();
-		if (!IsValid(TargetActor) || TargetActor == SourceActor)
-		{
-			continue;
-		}
-
-		UniqueTargets.Add(TargetActor);
-	}
-
-	for (AActor* TargetActor : UniqueTargets)
-	{
-		ApplyDamageToActor(TargetActor, SourceActor, FinalDamage);
+		ApplyDamageToActor(
+			TargetHit.TargetActor.Get(),
+			SourceCharacter,
+			FinalDamage,
+			&TargetHit.HitResult);
 	}
 }
 
 void UGA_ProjectileExplode::ApplyDamageToActor(
 	AActor* TargetActor,
-	AActor* SourceActor,
-	float DamageAmount) const
+	ANexusCharacterBase* SourceCharacter,
+	float DamageAmount,
+	const FHitResult* HitResult) const
 {
-	if (!IsValid(TargetActor) || !IsValid(SourceActor) || DamageAmount <= 0.f)
+	if (!IsValid(TargetActor) || !IsValid(SourceCharacter) || DamageAmount <= 0.f)
 	{
 		return;
 	}
 
-	ANexusCharacterBase* SourceCharacter = Cast<ANexusCharacterBase>(SourceActor);
 	ANexusCharacterBase* TargetCharacter = Cast<ANexusCharacterBase>(TargetActor);
-
-	if (!SourceCharacter || !TargetCharacter)
+	if (!TargetCharacter)
 	{
 		return;
 	}
@@ -200,5 +205,11 @@ void UGA_ProjectileExplode::ApplyDamageToActor(
 		return;
 	}
 
-	SourceCharacter->ApplyDamageToTarget(TargetCharacter, DamageAmount);
+	SourceCharacter->ApplyDamageToTargetWithCueParams(
+		TargetCharacter,
+		DamageAmount,
+		SourceCharacter,
+		SourceCharacter,
+		HitResult
+		);
 }

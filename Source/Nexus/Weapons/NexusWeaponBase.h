@@ -6,8 +6,8 @@
 #include "NexusWeaponBase.generated.h"
 
 class ANexusPlayerCharacter;
-class ANexusWeaponBase;
 class ANexusCharacterBase;
+class UAnimInstance;
 
 USTRUCT(BlueprintType)
 struct FWeaponConfig
@@ -18,10 +18,10 @@ struct FWeaponConfig
 	TArray<FNexusAbilityGrant> AbilityGrants;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Weapons")
-	FName WeaponSocketName;
+	FName WeaponSocketName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Weapons|Optional")
-	FName OffHandSocketName;
+	FName OffHandSocketName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Weapons")
 	TSubclassOf<UAnimInstance> AnimInstanceClass;
@@ -40,19 +40,30 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	USceneComponent* SceneComponent;
+	TObjectPtr<USceneComponent> SceneComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	UStaticMeshComponent* WeaponMesh;
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components|Optional")
-	UStaticMeshComponent* OffHandWeaponMesh;
+	TObjectPtr<UStaticMeshComponent> OffHandWeaponMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Character")
-	ANexusCharacterBase* OwnerCharacter;
+	TObjectPtr<ANexusCharacterBase> OwnerCharacter = nullptr;
 
 public:
+	UFUNCTION(BlueprintCallable, Category="Weapons")
+	void SetOwnerCharacter(ANexusCharacterBase* InOwnerCharacter);
+
+	UFUNCTION(BlueprintPure, Category="Weapons")
+	ANexusCharacterBase* GetOwnerCharacter() const { return OwnerCharacter; }
+
+	UFUNCTION(BlueprintPure, Category="Weapons")
 	UStaticMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
-	bool HasOffHandWeapon() const { return OffHandWeaponMesh->GetStaticMesh() != nullptr; }
+
+	UFUNCTION(BlueprintPure, Category="Weapons")
+	bool HasOffHandWeapon() const;
+
+	UFUNCTION(BlueprintPure, Category="Weapons")
 	UStaticMeshComponent* GetOffHandWeaponMesh() const { return OffHandWeaponMesh; }
 };

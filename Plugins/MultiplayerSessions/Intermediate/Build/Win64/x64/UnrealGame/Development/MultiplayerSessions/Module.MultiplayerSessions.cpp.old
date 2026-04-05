@@ -6,4 +6,3 @@
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/LobbyGameMode.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/Menu.cpp"
 #include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/MultiplayerSessions.cpp"
-#include "C:/UnrealProjects/Nexus/Plugins/MultiplayerSessions/Source/MultiplayerSessions/Source/MultiplayerSessions/Private/MultiplayerSessionsSubsystem.cpp"

@@ -81,6 +81,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> StunMontage = nullptr;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="State|Death")
+	float DeathLifeSpan = 3.0f;
+
 	TArray<FGameplayAbilitySpecHandle> ClassAbilityHandles;
 	TArray<FGameplayAbilitySpecHandle> WeaponAbilityHandles;
 
@@ -104,6 +107,8 @@ protected:
 	virtual void InitializeCombatLoadout();
 
 	virtual TArray<FNexusAbilityGrant> GetClassAbilitiesToGrant() const;
+
+	virtual void DisableCharacterForDeath();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Deflect")
@@ -130,14 +135,6 @@ public:
 		float Damage);
 
 	void DebugLogGrantedAbilities(const FString& Context) const;
-
-	UFUNCTION(BlueprintCallable, Category="Combat|Deflect")
-	bool CanParryMeleeHit(ANexusCharacterBase* Attacker) const;
-
-	UFUNCTION(BlueprintCallable, Category="Combat|Deflect")
-	bool IsAttackWithinDeflectAngle(
-		ANexusCharacterBase* Attacker,
-		float MinDotThreshold = 0.2f) const;
 
 public:
 	UFUNCTION(BlueprintCallable, Category="Team")
@@ -234,6 +231,14 @@ public:
 	void ApplyDamageToTarget(
 		ANexusCharacterBase* Target,
 		float Damage);
+
+	void ApplyDamageToTargetWithCueParams(
+		ANexusCharacterBase* Target,
+		float Damage,
+		AActor* InstigatorActor,
+		AActor* EffectCauserActor,
+		const FHitResult* HitResult,
+		UObject* SourceObject = nullptr);
 
 	UFUNCTION(BlueprintPure, Category="State")
 	bool GetIsDead() const { return bIsDead; }

@@ -1,14 +1,13 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "Nexus/Weapons/NexusWeaponBase.h"
 
-
-#include "NexusWeaponBase.h"
-
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Nexus/Character/NexusCharacterBase.h"
-
 
 ANexusWeaponBase::ANexusWeaponBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
 	bReplicates = true;
 	SetReplicateMovement(true);
 
@@ -22,4 +21,20 @@ ANexusWeaponBase::ANexusWeaponBase()
 	OffHandWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OffHandWeaponMesh"));
 	OffHandWeaponMesh->SetupAttachment(SceneComponent);
 	OffHandWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void ANexusWeaponBase::SetOwnerCharacter(ANexusCharacterBase* InOwnerCharacter)
+{
+	OwnerCharacter = InOwnerCharacter;
+
+	if (InOwnerCharacter)
+	{
+		SetOwner(InOwnerCharacter);
+		SetInstigator(Cast<APawn>(InOwnerCharacter));
+	}
+}
+
+bool ANexusWeaponBase::HasOffHandWeapon() const
+{
+	return OffHandWeaponMesh && OffHandWeaponMesh->GetStaticMesh() != nullptr;
 }

@@ -9,6 +9,7 @@
 #include "NexusPlayerState.generated.h"
 
 class ANexusCharacterBase;
+class ANexusWeaponBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerProfileChanged);
 
@@ -22,6 +23,21 @@ struct FNexusPersistentCooldown
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ExpireWorldTimeSeconds = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FNexusLoadout
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loadout")
+	TObjectPtr<UCharacterClassInfo> SelectedClass = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loadout")
+	TSubclassOf<ANexusWeaponBase> SelectedWeapon = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loadout")
+	TArray<FNexusAbilityGrant> SelectedClassAbilityGrants;
 };
 
 UCLASS()
@@ -38,8 +54,8 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_TeamID, EditAnywhere, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
 	ENexusTeamID TeamID = ENexusTeamID::Neutral;
 
-	UPROPERTY(ReplicatedUsing=OnRep_CharacterClassInfo, EditAnywhere, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UCharacterClassInfo> CharacterClassInfo = nullptr;
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentLoadout, EditAnywhere, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
+	FNexusLoadout CurrentLoadout;
 
 	UPROPERTY(ReplicatedUsing=OnRep_SelectionLockedIn, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
 	bool bSelectionLockedIn = false;
@@ -54,12 +70,13 @@ protected:
 	void OnRep_TeamID();
 
 	UFUNCTION()
-	void OnRep_CharacterClassInfo();
+	void OnRep_CurrentLoadout();
 
 	UFUNCTION()
 	void OnRep_SelectionLockedIn();
 
 	void HandleProfileChanged();
+	void NormalizeCurrentLoadout();
 
 	float GetRemainingPersistentCooldownTime(const FNexusPersistentCooldown& PersistentCooldown) const;
 
@@ -78,13 +95,37 @@ public:
 	void SetCharacterClassInfo(UCharacterClassInfo* InInfo);
 
 	UFUNCTION(BlueprintPure, Category="Profile")
-	UCharacterClassInfo* GetCharacterClassInfo() const { return CharacterClassInfo; }
+	UCharacterClassInfo* GetCharacterClassInfo() const { return CurrentLoadout.SelectedClass; }
+
+	UFUNCTION(BlueprintCallable, Category="Profile")
+	void SetSelectedWeaponClass(TSubclassOf<ANexusWeaponBase> InWeaponClass);
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	TSubclassOf<ANexusWeaponBase> GetSelectedWeaponClass() const { return CurrentLoadout.SelectedWeapon; }
+
+	UFUNCTION(BlueprintCallable, Category="Profile")
+	void SetSelectedClassAbilityGrants(const TArray<FNexusAbilityGrant>& InAbilityGrants);
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	const TArray<FNexusAbilityGrant>& GetSelectedClassAbilityGrants() const
+	{
+		return CurrentLoadout.SelectedClassAbilityGrants;
+	}
+
+	UFUNCTION(BlueprintCallable, Category="Profile")
+	void SetLoadout(const FNexusLoadout& InLoadout);
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	const FNexusLoadout& GetLoadout() const { return CurrentLoadout; }
 
 	UFUNCTION(BlueprintCallable, Category="Profile")
 	void SetSelectionLockedIn(bool bLockedIn);
 
 	UFUNCTION(BlueprintPure, Category="Profile")
 	bool GetSelectionLockedIn() const { return bSelectionLockedIn; }
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	bool IsWeaponAllowedForCurrentClass(TSubclassOf<ANexusWeaponBase> WeaponClass) const;
 
 	void CapturePersistentCombatStateFromCharacter(ANexusCharacterBase* Character);
 	void ApplyPersistentCombatProfileToCharacter(ANexusCharacterBase* Character);

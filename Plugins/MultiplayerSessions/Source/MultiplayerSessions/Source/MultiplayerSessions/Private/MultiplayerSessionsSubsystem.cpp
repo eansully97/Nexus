@@ -2,10 +2,14 @@
 
 
 #include "MultiplayerSessionsSubsystem.h"
+
 #include "OnlineSubsystem.h"
+#include "OnlineSubsystemNames.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
 #include "Online/OnlineSessionNames.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogMultiplayerSessionsSubsystem, Log, All);
 
 UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem() :
 	CreateSessionCompleteDelegate(
@@ -25,7 +29,7 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 {
 	if (!IsValidSessionInterface())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: SessionInterface is invalid"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("CreateSession failed: SessionInterface is invalid"));
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
 		return;
 	}
@@ -44,21 +48,24 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 	CreateSessionCompleteDelegateHandle =
 		SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
 
+	const FName ActiveSubsystemName = GetCurrentSubsystemName();
+	const bool bIsNullSubsystem = IsUsingNullSubsystem();
+
 	LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
-	LastSessionSettings->bIsLANMatch = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
+	LastSessionSettings->bIsLANMatch = bIsNullSubsystem;
 	LastSessionSettings->NumPublicConnections = NumPublicConnections;
 	LastSessionSettings->bAllowJoinInProgress = true;
 	LastSessionSettings->bAllowJoinViaPresence = true;
 	LastSessionSettings->bShouldAdvertise = true;
 	LastSessionSettings->bUsesPresence = true;
-	LastSessionSettings->bUseLobbiesIfAvailable = true;
+	LastSessionSettings->bUseLobbiesIfAvailable = !bIsNullSubsystem;
 	LastSessionSettings->Set(FName("MatchType"), MatchType, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 	LastSessionSettings->BuildUniqueId = 1;
 
 	const ULocalPlayer* LocalPlayer = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
 	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: LocalPlayer or PreferredUniqueNetId is invalid"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("CreateSession failed: LocalPlayer or PreferredUniqueNetId is invalid"));
 
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
@@ -67,21 +74,28 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 
 	if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CreateSession failed: SessionInterface->CreateSession returned false"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("CreateSession failed: SessionInterface->CreateSession returned false"));
 
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("CreateSession started: MatchType=%s PublicConnections=%d"), *MatchType, NumPublicConnections);
+	UE_LOG(
+		LogMultiplayerSessionsSubsystem,
+		Log,
+		TEXT("CreateSession started: Subsystem=%s MatchType=%s PublicConnections=%d bIsLANMatch=%s"),
+		*ActiveSubsystemName.ToString(),
+		*MatchType,
+		NumPublicConnections,
+		bIsNullSubsystem ? TEXT("true") : TEXT("false"));
 }
 
 void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 {
 	if (!IsValidSessionInterface())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: SessionInterface is invalid"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("FindSessions failed: SessionInterface is invalid"));
 		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
 		return;
 	}
@@ -91,7 +105,8 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 
 	LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
 
-	const bool bIsNullSubsystem = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL";
+	const FName ActiveSubsystemName = GetCurrentSubsystemName();
+	const bool bIsNullSubsystem = IsUsingNullSubsystem();
 
 	LastSessionSearch->MaxSearchResults = MaxSearchResults;
 	LastSessionSearch->bIsLanQuery = bIsNullSubsystem;
@@ -104,7 +119,7 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 	const ULocalPlayer* LocalPlayer = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
 	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: LocalPlayer or PreferredUniqueNetId is invalid"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("FindSessions failed: LocalPlayer or PreferredUniqueNetId is invalid"));
 
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
@@ -113,14 +128,15 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 
 	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("FindSessions failed: SessionInterface->FindSessions returned false"));
+		UE_LOG(LogMultiplayerSessionsSubsystem, Warning, TEXT("FindSessions failed: SessionInterface->FindSessions returned false"));
 
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("FindSessions started: MaxSearchResults=%d | bIsLanQuery=%s | UsingSearchLobbies=%s"),
+	UE_LOG(LogMultiplayerSessionsSubsystem, Log, TEXT("FindSessions started: Subsystem=%s MaxSearchResults=%d | bIsLanQuery=%s | UsingSearchLobbies=%s"),
+		*ActiveSubsystemName.ToString(),
 		MaxSearchResults,
 		bIsNullSubsystem ? TEXT("true") : TEXT("false"),
 		bIsNullSubsystem ? TEXT("false") : TEXT("true"));
@@ -166,6 +182,21 @@ void UMultiplayerSessionsSubsystem::StartSession()
 {
 }
 
+FName UMultiplayerSessionsSubsystem::GetCurrentSubsystemName() const
+{
+	if (const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld()))
+	{
+		return Subsystem->GetSubsystemName();
+	}
+
+	return NAME_None;
+}
+
+bool UMultiplayerSessionsSubsystem::IsUsingNullSubsystem() const
+{
+	return GetCurrentSubsystemName() == NULL_SUBSYSTEM;
+}
+
 bool UMultiplayerSessionsSubsystem::IsValidSessionInterface()
 {
 	if (!SessionInterface)
@@ -198,7 +229,7 @@ void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
 
 	const int32 ResultCount = LastSessionSearch.IsValid() ? LastSessionSearch->SearchResults.Num() : -1;
 
-	UE_LOG(LogTemp, Log, TEXT("Subsystem OnFindSessionsComplete: Success=%s Results=%d"),
+	UE_LOG(LogMultiplayerSessionsSubsystem, Log, TEXT("Subsystem OnFindSessionsComplete: Success=%s Results=%d"),
 		bWasSuccessful ? TEXT("true") : TEXT("false"),
 		ResultCount);
 

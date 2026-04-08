@@ -1,4 +1,6 @@
-﻿#include "NexusAbilityFunctionLibrary.h"
+﻿// AbilityLibrary.cpp
+
+#include "NexusAbilityFunctionLibrary.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -501,5 +503,27 @@ bool UNexusAbilityFunctionLibrary::ExecuteGameplayCueOnActor(
 	}
 
 	ASC->ExecuteGameplayCue(CueTag, EffectContext);
+	return true;
+}
+
+bool UNexusAbilityFunctionLibrary::ExecuteGameplayCueOnActorWithParams(
+	AActor* TargetActor,
+	const FGameplayTag& CueTag,
+	const FGameplayCueParameters& CueParameters)
+{
+	if (!IsValid(TargetActor) || !CueTag.IsValid())
+	{
+		return false;
+	}
+
+	UAbilitySystemComponent* ASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+
+	if (!ASC)
+	{
+		return false;
+	}
+
+	ASC->ExecuteGameplayCue(CueTag, CueParameters);
 	return true;
 }

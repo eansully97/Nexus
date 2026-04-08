@@ -4,6 +4,18 @@
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 
+namespace
+{
+	bool AreEquivalentAbilitySpecs(const FGameplayAbilitySpec& A, const FGameplayAbilitySpec& B)
+	{
+		return A.Handle == B.Handle &&
+			A.Ability == B.Ability &&
+			A.Level == B.Level &&
+			A.SourceObject == B.SourceObject &&
+			A.GetDynamicSpecSourceTags() == B.GetDynamicSpecSourceTags();
+	}
+}
+
 UNexusAbilitySystemComponent::UNexusAbilitySystemComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -91,10 +103,11 @@ void UNexusAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& I
 	}
 }
 
-void UNexusAbilitySystemComponent::BroadcastOwnerCombatStateChanged() const
+void UNexusAbilitySystemComponent::BroadcastOwnerGrantedAbilitiesChanged() const
 {
 	if (ANexusCharacterBase* Character = Cast<ANexusCharacterBase>(GetOwner()))
 	{
+		Character->OnGrantedAbilitiesChanged.Broadcast();
 		Character->OnCombatStateChanged.Broadcast();
 	}
 }
@@ -119,7 +132,7 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 			const FGameplayAbilitySpec* NewSpec =
 				ActivatableAbilities.Items.IsValidIndex(Index) ? &ActivatableAbilities.Items[Index] : nullptr;
 
-			if (!OldSpec || !NewSpec || OldSpec->Ability != NewSpec->Ability)
+			if (!OldSpec || !NewSpec || !AreEquivalentAbilitySpecs(*OldSpec, *NewSpec))
 			{
 				bChanged = true;
 				break;
@@ -130,6 +143,6 @@ void UNexusAbilitySystemComponent::OnRep_ActivateAbilities()
 	if (bChanged)
 	{
 		LastActivatedAbilitySpecs = ActivatableAbilities.Items;
-		BroadcastOwnerCombatStateChanged();
+		BroadcastOwnerGrantedAbilitiesChanged();
 	}
 }

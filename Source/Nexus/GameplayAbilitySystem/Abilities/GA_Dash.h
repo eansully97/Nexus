@@ -36,8 +36,6 @@ protected:
 	void OnDashDurationFinished();
 
 	FVector GetDashDirection() const;
-	void AddDashCue();
-	void RemoveDashCue();
 	void CleanupTasks();
 
 protected:
@@ -55,9 +53,6 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash")
 	bool bStopMovementOnDashEnd = true;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash")
-	FGameplayTag DashCueTag;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_ApplyRootMotionConstantForce> RootMotionTask = nullptr;

@@ -15,9 +15,14 @@ void ANexusHUD::BeginPlay()
 
 void ANexusHUD::InitMainHUDWidget()
 {
-	if (MainHUDWidgetClass)
+	if (MainHUDWidget || !MainHUDWidgetClass)
 	{
-		MainHUDWidget = CreateWidget<UNexusMainHUDWidget>(GetWorld(), MainHUDWidgetClass);
+		return;
+	}
+
+	if (PlayerOwner)
+	{
+		MainHUDWidget = CreateWidget<UNexusMainHUDWidget>(PlayerOwner, MainHUDWidgetClass);
 		if (MainHUDWidget)
 		{
 			MainHUDWidget->AddToViewport();

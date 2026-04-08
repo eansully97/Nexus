@@ -1,21 +1,30 @@
+// NexusCharacterBase.cpp
+
 #include "Nexus/Character/NexusCharacterBase.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
+#include "Blueprint/UserWidget.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/DataAssets/GameplayEffectClassSet.h"
+#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 #include "Nexus/FunctionLibraries/NexusCombatFunctionLibrary.h"
+#include "Nexus/HUD/Widgets/NexusCharacterOverheadWidget.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogNexusCharacterBase, Log, All);
+
 ANexusCharacterBase::ANexusCharacterBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
 
 	AbilitySystemComponent = CreateDefaultSubobject<UNexusAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
@@ -25,23 +34,36 @@ ANexusCharacterBase::ANexusCharacterBase()
 
 	GetCapsuleComponent()->InitCapsuleSize(35.f, 90.f);
 
-	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
-	MoveComp->JumpZVelocity = 500.f;
-	MoveComp->AirControl = 0.35f;
-	MoveComp->MaxWalkSpeed = 500.f;
-	MoveComp->MinAnalogWalkSpeed = 20.f;
-	MoveComp->BrakingDecelerationWalking = 2000.f;
-	MoveComp->BrakingDecelerationFalling = 1500.f;
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MinAnalogWalkSpeed = 20.f;
+		MoveComp->BrakingDecelerationWalking = 2000.f;
+		MoveComp->BrakingDecelerationFalling = 1500.f;
+	}
+
+	OverheadWidgetClass = UNexusCharacterOverheadWidget::StaticClass();
+
+	ApplyMovementAttributesToMovementComponent();
 }
 
 void ANexusCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
+	BindMovementAttributeDelegates();
+	ApplyMovementAttributesToMovementComponent();
+	InitializeOverheadWidget();
+	RefreshOverheadWidget();
 }
 
 void ANexusCharacterBase::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
+
+	if (AbilitySystemComponent)
+	{
+		// Re-apply here so Blueprint overrides on AbilityReplicationMode are respected.
+		AbilitySystemComponent->SetReplicationMode(AbilityReplicationMode);
+	}
 }
 
 void ANexusCharacterBase::PossessedBy(AController* NewController)
@@ -80,11 +102,18 @@ void ANexusCharacterBase::OnRep_PlayerState()
 
 void ANexusCharacterBase::InitializeAbilityActorInfo()
 {
-	if (AbilitySystemComponent)
+	if (!AbilitySystemComponent)
 	{
-		AbilitySystemComponent->InitAbilityActorInfo(this, this);
-		AbilitySystemComponent->RefreshAbilityActorInfo();
+		return;
 	}
+
+	AbilitySystemComponent->SetReplicationMode(AbilityReplicationMode);
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	AbilitySystemComponent->RefreshAbilityActorInfo();
+	BindMovementAttributeDelegates();
+	ApplyMovementAttributesToMovementComponent();
+
+	RefreshDeadGameplayTag();
 }
 
 void ANexusCharacterBase::InitializeFromPlayerState()
@@ -93,16 +122,56 @@ void ANexusCharacterBase::InitializeFromPlayerState()
 	{
 		SetTeamID(PS->GetTeamID());
 	}
+
+	RefreshOverheadWidget();
 }
 
 void ANexusCharacterBase::InitializeCombatLoadout()
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || bIsDead)
 	{
 		return;
 	}
 
 	RebuildCombatLoadout();
+}
+
+void ANexusCharacterBase::BindMovementAttributeDelegates()
+{
+	if (!AbilitySystemComponent || !BasicAttributeSet)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetMoveSpeedAttribute()).RemoveAll(this);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetJumpVelocityAttribute()).RemoveAll(this);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetAirControlAttribute()).RemoveAll(this);
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetMoveSpeedAttribute()).AddUObject(this, &ThisClass::HandleMovementAttributeChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetJumpVelocityAttribute()).AddUObject(this, &ThisClass::HandleMovementAttributeChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		BasicAttributeSet->GetAirControlAttribute()).AddUObject(this, &ThisClass::HandleMovementAttributeChanged);
+}
+
+void ANexusCharacterBase::ApplyMovementAttributesToMovementComponent() const
+{
+	const UBasicAttributeSet* Attributes = BasicAttributeSet;
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!Attributes || !MoveComp)
+	{
+		return;
+	}
+
+	const float MoveSpeed = FMath::Max(0.0f, Attributes->GetMoveSpeed());
+	MoveComp->MaxWalkSpeed = MoveSpeed;
+	MoveComp->MinAnalogWalkSpeed = FMath::Min(20.0f, MoveSpeed);
+	MoveComp->JumpZVelocity = FMath::Max(0.0f, Attributes->GetJumpVelocity());
+	MoveComp->AirControl = FMath::Clamp(Attributes->GetAirControl(), 0.0f, 1.0f);
 }
 
 UAbilitySystemComponent* ANexusCharacterBase::GetAbilitySystemComponent() const
@@ -130,6 +199,7 @@ void ANexusCharacterBase::SetTeamID(ENexusTeamID NewTeamID)
 
 	if (HasAuthority())
 	{
+		ForceNetUpdate();
 		HandleTeamChanged();
 	}
 }
@@ -142,23 +212,26 @@ void ANexusCharacterBase::OnRep_TeamID()
 void ANexusCharacterBase::HandleTeamChanged()
 {
 	ApplyTeamVisuals();
-	OnCombatStateChanged.Broadcast();
+	RefreshOverheadWidget();
+	OnTeamChanged.Broadcast();
+	BroadcastLegacyCombatStateChanged();
 }
 
 void ANexusCharacterBase::ApplyTeamVisuals() const
 {
+	// Intentionally left as an extension point for derived classes / blueprints.
 }
 
 bool ANexusCharacterBase::IsFriendlyTo(AActor* OtherActor) const
 {
 	const ANexusCharacterBase* OtherCharacter = Cast<ANexusCharacterBase>(OtherActor);
-	return OtherCharacter && TeamID == OtherCharacter->TeamID;
+	return OtherCharacter && OtherCharacter != this && TeamID == OtherCharacter->TeamID;
 }
 
 bool ANexusCharacterBase::IsEnemyTo(AActor* OtherActor) const
 {
 	const ANexusCharacterBase* OtherCharacter = Cast<ANexusCharacterBase>(OtherActor);
-	return OtherCharacter && TeamID != OtherCharacter->TeamID;
+	return OtherCharacter && OtherCharacter != this && TeamID != OtherCharacter->TeamID;
 }
 
 void ANexusCharacterBase::SetCurrentCapturePoint(ANexusCapturePoint* NewCapturePoint)
@@ -172,6 +245,7 @@ void ANexusCharacterBase::SetCurrentCapturePoint(ANexusCapturePoint* NewCaptureP
 
 	if (HasAuthority())
 	{
+		ForceNetUpdate();
 		HandleCurrentCapturePointChanged();
 	}
 }
@@ -183,7 +257,107 @@ void ANexusCharacterBase::OnRep_CurrentCapturePoint()
 
 void ANexusCharacterBase::HandleCurrentCapturePointChanged()
 {
-	OnCombatStateChanged.Broadcast();
+	OnCapturePointChanged.Broadcast();
+	BroadcastLegacyCombatStateChanged();
+}
+
+void ANexusCharacterBase::InitializeOverheadWidget()
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (!OverheadWidgetComponent)
+	{
+		TArray<UWidgetComponent*> WidgetComponents;
+		GetComponents<UWidgetComponent>(WidgetComponents);
+
+		for (UWidgetComponent* WidgetComponent : WidgetComponents)
+		{
+			if (!WidgetComponent)
+			{
+				continue;
+			}
+
+			const bool bLooksLikeOverheadWidget =
+				WidgetComponent->GetName().Contains(TEXT("Overhead")) ||
+				(WidgetComponent->GetWidgetClass() &&
+					WidgetComponent->GetWidgetClass()->GetName().Contains(TEXT("Overhead")));
+
+			if (bLooksLikeOverheadWidget)
+			{
+				OverheadWidgetComponent = WidgetComponent;
+				break;
+			}
+		}
+
+		if (!OverheadWidgetComponent && WidgetComponents.Num() > 0)
+		{
+			OverheadWidgetComponent = WidgetComponents[0];
+		}
+	}
+
+	if (!OverheadWidgetComponent)
+	{
+		OverheadWidgetComponent = NewObject<UWidgetComponent>(this, TEXT("OverheadWidgetComponent"));
+		if (!OverheadWidgetComponent)
+		{
+			return;
+		}
+
+		AddOwnedComponent(OverheadWidgetComponent);
+		OverheadWidgetComponent->SetupAttachment(GetRootComponent());
+		OverheadWidgetComponent->RegisterComponent();
+	}
+
+	OverheadWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	OverheadWidgetComponent->SetDrawAtDesiredSize(true);
+	OverheadWidgetComponent->SetPivot(FVector2D(0.5f, 1.0f));
+	OverheadWidgetComponent->SetRelativeLocation(OverheadWidgetRelativeLocation);
+	OverheadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	OverheadWidgetComponent->SetGenerateOverlapEvents(false);
+	OverheadWidgetComponent->SetCastShadow(false);
+	OverheadWidgetComponent->SetWindowFocusable(false);
+
+	TSubclassOf<UUserWidget> DesiredWidgetClass = OverheadWidgetClass;
+	if (!DesiredWidgetClass)
+	{
+		DesiredWidgetClass = UNexusCharacterOverheadWidget::StaticClass();
+	}
+
+	if (OverheadWidgetComponent->GetWidgetClass() != DesiredWidgetClass)
+	{
+		OverheadWidgetComponent->SetWidgetClass(DesiredWidgetClass);
+	}
+
+	OverheadWidgetComponent->InitWidget();
+}
+
+void ANexusCharacterBase::RefreshOverheadWidget()
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	InitializeOverheadWidget();
+
+	if (!OverheadWidgetComponent)
+	{
+		return;
+	}
+
+	if (UNexusCharacterOverheadWidget* OverheadWidget =
+		Cast<UNexusCharacterOverheadWidget>(OverheadWidgetComponent->GetUserWidgetObject()))
+	{
+		OverheadWidget->SetObservedCharacter(this);
+	}
+}
+
+void ANexusCharacterBase::HandleMovementAttributeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	ApplyMovementAttributesToMovementComponent();
 }
 
 void ANexusCharacterBase::RefreshDeadGameplayTag()
@@ -218,6 +392,7 @@ void ANexusCharacterBase::Die()
 	}
 
 	bIsDead = true;
+
 	ApplyDeathState_Server();
 	Multicast_DeathAnimation();
 	HandleDeathStateChanged();
@@ -231,12 +406,23 @@ void ANexusCharacterBase::OnRep_IsDead()
 void ANexusCharacterBase::HandleDeathStateChanged()
 {
 	RefreshDeadGameplayTag();
-	ApplyDeathPresentation();
-	OnCombatStateChanged.Broadcast();
+
+	if (bIsDead)
+	{
+		ApplyDeathPresentation();
+	}
+
+	OnDeathStateChanged.Broadcast();
+	BroadcastLegacyCombatStateChanged();
 }
 
 void ANexusCharacterBase::ApplyDeathState_Server()
 {
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
 	ClearAllGrantedAbilitySets();
 	SetCanBeDamaged(false);
 
@@ -254,7 +440,6 @@ void ANexusCharacterBase::ApplyDeathState_Server()
 void ANexusCharacterBase::ApplyDeathPresentation()
 {
 	DisableCharacterForDeath();
-
 	BP_OnDeathStarted();
 }
 
@@ -274,6 +459,7 @@ void ANexusCharacterBase::PlayDeathAnimation()
 void ANexusCharacterBase::EnterRagdoll()
 {
 	DisableCharacterForDeath();
+
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetCollisionProfileName(TEXT("Ragdoll"));
@@ -290,10 +476,10 @@ void ANexusCharacterBase::DisableCharacterForDeath()
 		MoveComp->StopMovementImmediately();
 		MoveComp->DisableMovement();
 	}
-	
+
 	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
 	{
-		CapsuleComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 }
 
@@ -338,7 +524,10 @@ TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilitySet(
 			GrantedHandles.Add(Handle);
 		}
 	}
-
+	if (GrantedHandles.Num() > 0)
+	{
+		BroadcastGrantedAbilitiesChanged();
+	}
 	return GrantedHandles;
 }
 
@@ -360,6 +549,7 @@ void ANexusCharacterBase::ClearAbilitySet(ENexusAbilitySource Source)
 	}
 
 	HandleArray.Reset();
+	BroadcastGrantedAbilitiesChanged();
 }
 
 void ANexusCharacterBase::ClearAllGrantedAbilitySets()
@@ -439,7 +629,7 @@ TArray<FNexusAbilityGrant> ANexusCharacterBase::GetClassAbilitiesToGrant() const
 
 void ANexusCharacterBase::RebuildCombatLoadout()
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || bIsDead)
 	{
 		return;
 	}
@@ -465,7 +655,7 @@ void ANexusCharacterBase::DebugLogGrantedAbilities(const FString& Context) const
 	TArray<FGameplayAbilitySpecHandle> Handles;
 	AbilitySystemComponent->GetAllAbilities(Handles);
 
-	UE_LOG(LogTemp, Warning, TEXT("[%s] Granted ability count: %d"), *Context, Handles.Num());
+	UE_LOG(LogNexusCharacterBase, Log, TEXT("[%s] Granted ability count: %d"), *Context, Handles.Num());
 }
 
 TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnemies(
@@ -510,7 +700,12 @@ TArray<ANexusCharacterBase*> ANexusCharacterBase::PerformSphereTraceForValidEnem
 			continue;
 		}
 
-		HitCharacters.AddUnique(HitCharacter);
+		if (HitCharacters.Contains(HitCharacter))
+		{
+			continue;
+		}
+
+		HitCharacters.Add(HitCharacter);
 		OutValidHitResults.Add(Hit);
 	}
 
@@ -522,19 +717,24 @@ ENexusHitResolutionResult ANexusCharacterBase::ResolveMeleeHit(
 	const FHitResult& HitResult,
 	float Damage)
 {
-	if (!Target || Target->GetIsDead())
+	if (!Target || Target == this || Target->GetIsDead() || !IsEnemyTo(Target))
 	{
 		return ENexusHitResolutionResult::None;
 	}
 
-	const FVector ToAttacker = (GetActorLocation() - Target->GetActorLocation()).GetSafeNormal2D();
-	const FVector Forward = Target->GetActorForwardVector().GetSafeNormal2D();
-	const float Dot = FVector::DotProduct(Forward, ToAttacker);
-
-	if (UNexusCombatFunctionLibrary::CanCharacterDeflectMeleeHit(this, Target, Dot, NexusGameplayTags::Status_Defense_Deflecting))
+	if (UNexusCombatFunctionLibrary::CanCharacterDeflectMeleeHit(
+			Target,
+			this,
+			DeflectMinDotThreshold,
+			NexusGameplayTags::Status_Defense_Deflecting))
 	{
+		if (UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent())
+		{
+			TargetASC->CurrentMontageStop();
+		}
+
 		Target->HandleSuccessfulDeflect(this, HitResult);
-		return ENexusHitResolutionResult::Parried;
+		return ENexusHitResolutionResult::Deflected;
 	}
 
 	ApplyDamageToTargetWithCueParams(Target, Damage, this, this, &HitResult);
@@ -550,12 +750,30 @@ void ANexusCharacterBase::HandleSuccessfulDeflect(
 		return;
 	}
 
+	auto BuildDeflectEventData =
+		[&HitResult](AActor* EventInstigator, AActor* EventTarget, UAbilitySystemComponent* ContextASC)
+		{
+			FGameplayEventData EventData;
+			EventData.Instigator = EventInstigator;
+			EventData.Target = EventTarget;
+
+			if (ContextASC)
+			{
+				FGameplayEffectContextHandle ContextHandle = ContextASC->MakeEffectContext();
+				ContextHandle.AddInstigator(EventInstigator, EventInstigator);
+				ContextHandle.AddHitResult(HitResult, true);
+				EventData.ContextHandle = ContextHandle;
+			}
+
+			return EventData;
+		};
+
 	if (bPlayDeflectCueOnDefender)
 	{
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			this,
 			NexusGameplayTags::Event_Deflect_Triggered,
-			FGameplayEventData());
+			BuildDeflectEventData(Attacker, this, GetAbilitySystemComponent()));
 	}
 
 	if (bPlayDeflectCueOnAttacker)
@@ -563,7 +781,7 @@ void ANexusCharacterBase::HandleSuccessfulDeflect(
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			Attacker,
 			NexusGameplayTags::Event_Deflect_Triggered,
-			FGameplayEventData());
+			BuildDeflectEventData(this, Attacker, Attacker->GetAbilitySystemComponent()));
 	}
 
 	ApplyStunToTarget(Attacker, DeflectStunDuration);
@@ -597,35 +815,51 @@ void ANexusCharacterBase::ApplyGameplayEffectSpecsToTargets(
 	}
 }
 
+bool ANexusCharacterBase::SendGameplayEventToSelf(
+	const FGameplayTag& EventTag,
+	AActor* TargetActor,
+	AActor* OptionalObject)
+{
+	return UNexusAbilityFunctionLibrary::SendTargetedGameplayEventToActor(
+		this,
+		EventTag,
+		TargetActor,
+		OptionalObject);
+}
+
 void ANexusCharacterBase::ApplySetByCallerEffectToTarget(
 	ANexusCharacterBase* Target,
 	TSubclassOf<UGameplayEffect> EffectClass,
 	float Magnitude,
 	FGameplayTag DataTag)
 {
-	if (!AbilitySystemComponent || !Target || !Target->GetAbilitySystemComponent() || !EffectClass || !DataTag.IsValid())
+	UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
+	UAbilitySystemComponent* TargetASC = Target ? UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target) : nullptr;
+
+	if (!SourceASC || !TargetASC || !EffectClass || !DataTag.IsValid())
 	{
 		return;
 	}
 
-	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
+	FGameplayEffectContextHandle ContextHandle = SourceASC->MakeEffectContext();
+	ContextHandle.AddInstigator(this, this);
 	ContextHandle.AddSourceObject(this);
 
-	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(EffectClass, 1.f, ContextHandle);
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(EffectClass, 1.0f, ContextHandle);
 	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
 	{
 		return;
 	}
 
 	SpecHandle.Data->SetSetByCallerMagnitude(DataTag, Magnitude);
-	Target->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 }
 
 void ANexusCharacterBase::ApplyStunToTarget(
 	ANexusCharacterBase* Target,
 	float Duration)
 {
-	if (!EffectSet || !Target)
+	if (!EffectSet || !EffectSet->StunEffect || !Target || Duration <= 0.0f)
 	{
 		return;
 	}
@@ -637,22 +871,191 @@ void ANexusCharacterBase::ApplyStunToTarget(
 		NexusGameplayTags::Data_Value_Duration);
 }
 
-void ANexusCharacterBase::ApplyDamageToTarget(
-	ANexusCharacterBase* Target,
-	float Damage)
+FGameplayEffectSpecHandle ANexusCharacterBase::BuildEffectSpec(
+	const FNexusEffectApplicationParams& Params) const
 {
-	if (!EffectSet || !Target)
+	FGameplayEffectSpecHandle EmptyHandle;
+
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponent();
+	if (!SourceASC || !Params.EffectClass)
+	{
+		return EmptyHandle;
+	}
+
+	AActor* ResolvedInstigator = Params.InstigatorActor ? Params.InstigatorActor.Get() : const_cast<ANexusCharacterBase*>(this);
+	AActor* ResolvedEffectCauser = Params.EffectCauserActor ? Params.EffectCauserActor.Get() : ResolvedInstigator;
+	UObject* ResolvedSourceObject = Params.SourceObject ? Params.SourceObject.Get() : const_cast<ANexusCharacterBase*>(this);
+
+	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+	EffectContext.AddInstigator(ResolvedInstigator, ResolvedEffectCauser);
+	EffectContext.AddSourceObject(ResolvedSourceObject);
+
+	if (Params.bIncludeHitResult)
+	{
+		EffectContext.AddHitResult(Params.HitResult, true);
+
+		if (Params.bUseHitResultImpactPointAsOrigin)
+		{
+			EffectContext.AddOrigin(Params.HitResult.ImpactPoint);
+		}
+	}
+
+	FGameplayEffectSpecHandle SpecHandle =
+		SourceASC->MakeOutgoingSpec(Params.EffectClass, Params.EffectLevel, EffectContext);
+
+	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
+	{
+		return EmptyHandle;
+	}
+
+	for (const FNexusSetByCallerMagnitude& MagnitudeData : Params.SetByCallerMagnitudes)
+	{
+		if (!MagnitudeData.DataTag.IsValid())
+		{
+			continue;
+		}
+
+		SpecHandle.Data->SetSetByCallerMagnitude(
+			MagnitudeData.DataTag,
+			MagnitudeData.Magnitude);
+	}
+
+	return SpecHandle;
+}
+
+void ANexusCharacterBase::ApplyEffectToTarget(
+	ANexusCharacterBase* Target,
+	const FNexusEffectApplicationParams& Params)
+{
+	if (!IsValid(Target))
 	{
 		return;
 	}
 
-	Damage = -FMath::Abs(Damage);
+	if (Params.bSkipIfTargetIsDead && Target->GetIsDead())
+	{
+		return;
+	}
 
-	ApplySetByCallerEffectToTarget(
-		Target,
-		EffectSet->DamageEffect,
-		Damage,
-		NexusGameplayTags::Data_Value_Damage);
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponent();
+	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+
+	if (!SourceASC || !TargetASC)
+	{
+		return;
+	}
+
+	const FGameplayEffectSpecHandle SpecHandle = BuildEffectSpec(Params);
+	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
+	{
+		return;
+	}
+
+	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+}
+
+void ANexusCharacterBase::ApplyEffectToTargets(
+	const TArray<ANexusCharacterBase*>& Targets,
+	const FNexusEffectApplicationParams& Params)
+{
+	for (ANexusCharacterBase* Target : Targets)
+	{
+		ApplyEffectToTarget(Target, Params);
+	}
+}
+
+void ANexusCharacterBase::ApplyDamageToTarget(
+	ANexusCharacterBase* Target,
+	float Damage)
+{
+	if (!EffectSet || !EffectSet->InstantDamageEffect || Damage == 0.0f)
+	{
+		return;
+	}
+
+	FNexusEffectApplicationParams Params;
+	Params.EffectClass = EffectSet->InstantDamageEffect;
+
+	FNexusSetByCallerMagnitude DamageMagnitude;
+	DamageMagnitude.DataTag = NexusGameplayTags::Data_Value_Damage;
+	DamageMagnitude.Magnitude = -FMath::Abs(Damage);
+	Params.SetByCallerMagnitudes.Add(DamageMagnitude);
+
+	ApplyEffectToTarget(Target, Params);
+}
+
+void ANexusCharacterBase::ApplyDamageToTargetWithDuration(
+	ANexusCharacterBase* Target,
+	float Damage,
+	float Duration)
+{
+	if (!EffectSet || !EffectSet->DamageWithDurationEffect || Damage == 0.0f || Duration <= 0.0f)
+	{
+		return;
+	}
+
+	FNexusEffectApplicationParams Params;
+	Params.EffectClass = EffectSet->DamageWithDurationEffect;
+
+	FNexusSetByCallerMagnitude DamageMagnitude;
+	DamageMagnitude.DataTag = NexusGameplayTags::Data_Value_Damage;
+	DamageMagnitude.Magnitude = -FMath::Abs(Damage);
+	Params.SetByCallerMagnitudes.Add(DamageMagnitude);
+
+	FNexusSetByCallerMagnitude DurationMagnitude;
+	DurationMagnitude.DataTag = NexusGameplayTags::Data_Value_Duration;
+	DurationMagnitude.Magnitude = Duration;
+	Params.SetByCallerMagnitudes.Add(DurationMagnitude);
+
+	ApplyEffectToTarget(Target, Params);
+}
+
+void ANexusCharacterBase::ApplyHealToTarget(
+	ANexusCharacterBase* Target,
+	float HealAmount)
+{
+	// Assumes you have a heal gameplay tag like NexusGameplayTags::Data_Value_Heal.
+	if (!EffectSet || !EffectSet->InstantHealEffect || HealAmount <= 0.0f)
+	{
+		return;
+	}
+
+	FNexusEffectApplicationParams Params;
+	Params.EffectClass = EffectSet->InstantHealEffect;
+
+	FNexusSetByCallerMagnitude HealMagnitude;
+	HealMagnitude.DataTag = NexusGameplayTags::Data_Value_Heal;
+	HealMagnitude.Magnitude = FMath::Abs(HealAmount);
+	Params.SetByCallerMagnitudes.Add(HealMagnitude);
+
+	ApplyEffectToTarget(Target, Params);
+}
+
+void ANexusCharacterBase::ApplyHealToTargetWithDuration(
+	ANexusCharacterBase* Target,
+	float HealAmount,
+	float Duration)
+{
+	// Assumes you have a heal gameplay tag like NexusGameplayTags::Data_Value_Heal.
+	if (!EffectSet || !EffectSet->HealWithDurationEffect || HealAmount <= 0.0f || Duration <= 0.0f)
+	{
+		return;
+	}
+
+	FNexusEffectApplicationParams Params;
+	Params.EffectClass = EffectSet->HealWithDurationEffect;
+
+	FNexusSetByCallerMagnitude HealMagnitude;
+	HealMagnitude.DataTag = NexusGameplayTags::Data_Value_Heal;
+	HealMagnitude.Magnitude = FMath::Abs(HealAmount);
+	Params.SetByCallerMagnitudes.Add(HealMagnitude);
+
+	FNexusSetByCallerMagnitude DurationMagnitude;
+	DurationMagnitude.DataTag = NexusGameplayTags::Data_Value_Duration;
+	DurationMagnitude.Magnitude = Duration;
+	Params.SetByCallerMagnitudes.Add(DurationMagnitude);
+
+	ApplyEffectToTarget(Target, Params);
 }
 
 void ANexusCharacterBase::ApplyDamageToTargetWithCueParams(
@@ -663,53 +1066,38 @@ void ANexusCharacterBase::ApplyDamageToTargetWithCueParams(
 	const FHitResult* HitResult,
 	UObject* SourceObject)
 {
-	if (!EffectSet || !EffectSet->DamageEffect || !IsValid(Target))
+	if (!EffectSet || !EffectSet->InstantDamageEffect || !IsValid(Target) || Damage == 0.0f)
 	{
 		return;
 	}
 
-	UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
-	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-
-	if (!SourceASC || !TargetASC)
-	{
-		return;
-	}
-
-	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
-	EffectContext.AddInstigator(this, EffectCauserActor ? EffectCauserActor : this);
-
-	if (SourceObject)
-	{
-		EffectContext.AddSourceObject(SourceObject);
-	}
-
-	if (InstigatorActor)
-	{
-		EffectContext.AddInstigator(InstigatorActor, EffectCauserActor);
-	}
+	FNexusEffectApplicationParams Params;
+	Params.EffectClass = EffectSet->InstantDamageEffect;
+	Params.InstigatorActor = InstigatorActor ? InstigatorActor : this;
+	Params.EffectCauserActor = EffectCauserActor ? EffectCauserActor : this;
+	Params.SourceObject = SourceObject ? SourceObject : this;
 
 	if (HitResult)
 	{
-		EffectContext.AddHitResult(*HitResult, true);
+		Params.bIncludeHitResult = true;
+		Params.HitResult = *HitResult;
 	}
 
-	if (HitResult)
-	{
-		EffectContext.AddOrigin(HitResult->ImpactPoint);
-	}
+	FNexusSetByCallerMagnitude DamageMagnitude;
+	DamageMagnitude.DataTag = NexusGameplayTags::Data_Value_Damage;
+	DamageMagnitude.Magnitude = -FMath::Abs(Damage);
+	Params.SetByCallerMagnitudes.Add(DamageMagnitude);
 
-	FGameplayEffectSpecHandle SpecHandle =
-		SourceASC->MakeOutgoingSpec(EffectSet->DamageEffect, 1.0f, EffectContext);
+	ApplyEffectToTarget(Target, Params);
+}
 
-	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
-	{
-		return;
-	}
+void ANexusCharacterBase::BroadcastGrantedAbilitiesChanged()
+{
+	OnGrantedAbilitiesChanged.Broadcast();
+	BroadcastLegacyCombatStateChanged();
+}
 
-	SpecHandle.Data->SetSetByCallerMagnitude(
-		NexusGameplayTags::Data_Value_Damage,
-		-FMath::Abs(Damage));
-
-	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+void ANexusCharacterBase::BroadcastLegacyCombatStateChanged()
+{
+	OnCombatStateChanged.Broadcast();
 }

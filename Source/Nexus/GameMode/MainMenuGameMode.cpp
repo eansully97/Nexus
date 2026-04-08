@@ -1,6 +1,6 @@
 ﻿#include "MainMenuGameMode.h"
 
-#include "Nexus/Controller/ANexusMenuPlayerController.h"
+#include "Nexus/Controller/NexusMenuPlayerController.h"
 
 AMainMenuGameMode::AMainMenuGameMode()
 {

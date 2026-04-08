@@ -66,4 +66,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Weapons")
 	UStaticMeshComponent* GetOffHandWeaponMesh() const { return OffHandWeaponMesh; }
+
+protected:
+	virtual void Destroyed() override;
+
+	UFUNCTION()
+	void HandleOwnerDeathStateChanged();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapons|Cleanup")
+	float OwnerDeathLifeSpan = 3.0f;
 };

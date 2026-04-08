@@ -6,6 +6,8 @@
 
 class UCharacterClassInfo;
 class ANexusPlayerState;
+class UMaterialInterface;
+class USkeletalMesh;
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class NEXUS_API UCharacterClassComponent : public UActorComponent
@@ -31,4 +33,15 @@ protected:
 
 	UPROPERTY()
 	bool bClassApplied = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USkeletalMesh> DefaultCharacterMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> DefaultCharacterMaterials;
+
+	bool bCachedDefaultCharacterMesh = false;
+
+	void CacheDefaultCharacterMesh();
+	void ApplyCharacterPresentation();
 };

@@ -3,7 +3,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
-#include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
 
@@ -87,11 +86,6 @@ void UNexusWeaponsManager::EquipOrSwap(TSubclassOf<ANexusWeaponBase> WeaponClass
 	OwnerCharacter = Character;
 
 	ApplyEquippedWeaponState();
-
-	Character->GrantAbilitySet(
-		ENexusAbilitySource::Weapon,
-		EquippedWeapon->WeaponConfig.AbilityGrants,
-		EquippedWeapon);
 }
 
 void UNexusWeaponsManager::UnequipCurrentWeapon()
@@ -101,8 +95,6 @@ void UNexusWeaponsManager::UnequipCurrentWeapon()
 	{
 		return;
 	}
-
-	Character->ClearAbilitySet(ENexusAbilitySource::Weapon);
 
 	ANexusWeaponBase* OldWeapon = EquippedWeapon;
 	EquippedWeapon = nullptr;

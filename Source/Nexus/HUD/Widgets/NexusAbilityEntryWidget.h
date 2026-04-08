@@ -6,10 +6,12 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "NexusAbilityEntryWidget.generated.h"
 
+class ANexusCharacterBase;
+class ANexusPlayerController;
 class UNexusGameplayAbility;
 class UAbilitySystemComponent;
-class UTextBlock;
 class UImage;
+class UTextBlock;
 
 UCLASS()
 class NEXUS_API UNexusAbilityEntryWidget : public UUserWidget
@@ -22,6 +24,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Abilities")
 	void InitializeAbilityEntry(AActor* InObservedActor, UAbilitySystemComponent* InASC, FGameplayAbilitySpecHandle InSpecHandle);
 
+	UFUNCTION(BlueprintPure, Category="Abilities")
+	FGameplayAbilitySpecHandle GetAbilitySpecHandle() const { return AbilitySpecHandle; }
+
 protected:
 	UPROPERTY(BlueprintReadOnly, Category="Abilities")
 	TObjectPtr<UAbilitySystemComponent> ObservedASC = nullptr;
@@ -29,14 +34,23 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Abilities")
 	TObjectPtr<AActor> ObservedActor = nullptr;
 
+	UPROPERTY(BlueprintReadOnly, Category="Abilities")
+	TObjectPtr<ANexusPlayerController> ObservedPlayerController = nullptr;
+
 	FGameplayTagContainer ObservedCooldownTags;
 	TArray<FDelegateHandle> CooldownTagEventHandles;
 
 	UFUNCTION()
 	void HandleCooldownGameplayTagChanged(const FGameplayTag GameplayTag, int32 NewCount);
 
+	UFUNCTION()
+	void HandleControllerTargetChanged(ANexusCharacterBase* NewTarget, bool bHasValidTarget);
+
 	void BindCooldownListeners();
 	void UnbindCooldownListeners();
+
+	void BindTargetingListener();
+	void UnbindTargetingListener();
 
 	void UpdateAbilityBGColor(bool bIsActive) const;
 
@@ -94,11 +108,6 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Abilities")
 	void BP_OnCooldownFinished();
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities")
-	float TargetStateRefreshRate = 0.05f;
-
-	FTimerHandle TargetStateTimerHandle;
 
 	void UpdateTargetRequirementState();
 	bool DoesAbilityNeedValidTarget() const;

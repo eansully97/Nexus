@@ -81,9 +81,9 @@ bool UNexusCombatFunctionLibrary::IsWithinFacingAngle(
 		return false;
 	}
 
-	const FVector DefenderForward = DefenderActor->GetActorForwardVector().GetSafeNormal();
+	const FVector DefenderForward = DefenderActor->GetActorForwardVector().GetSafeNormal2D();
 	const FVector ToAttacker =
-		(AttackerActor->GetActorLocation() - DefenderActor->GetActorLocation()).GetSafeNormal();
+		(AttackerActor->GetActorLocation() - DefenderActor->GetActorLocation()).GetSafeNormal2D();
 
 	const float Dot = FVector::DotProduct(DefenderForward, ToAttacker);
 	return Dot >= MinDotThreshold;

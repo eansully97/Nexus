@@ -56,9 +56,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
 	float TeleportDelay = 0.15f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Shadow Strike")
-	FGameplayTag ShadowStrikeCueTag;
-
 	UPROPERTY(Transient)
 	TObjectPtr<ANexusCharacterBase> CachedSourceCharacter;
 
@@ -77,16 +74,11 @@ protected:
 	UPROPERTY(Transient)
 	bool bStrikeExecuted = false;
 
-	UPROPERTY(Transient)
-	bool bCueActive = false;
-
 	bool FindTeleportLocation(FVector& OutLocation) const;
 	void TeleportAndFaceTarget(const FVector& TeleportLocation);
 	void StunTarget() const;
 	void DamageTarget() const;
 
-	void StartShadowStrikeCue();
-	void StopShadowStrikeCue();
 	void ExecuteShadowStrike();
 	void Cleanup();
 

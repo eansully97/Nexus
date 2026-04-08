@@ -27,6 +27,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void EndHitscan();
 
+	UFUNCTION(BlueprintCallable, Category="Weapons")
+	void ConfigureHitscanWindow(float InDamageHitScanRadius, float InDamageToDeal);
+
 protected:
 	virtual void BeginPlay() override;
 

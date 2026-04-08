@@ -11,9 +11,12 @@ void UNexusVitalsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	
-	if (APawn* OwningPawn = GetOwningPlayerPawn())
+	if (ShouldAutoObserveOwningPawn())
 	{
-		SetObservedPawn(OwningPawn);
+		if (APawn* OwningPawn = GetOwningPlayerPawn())
+		{
+			SetObservedPawn(OwningPawn);
+		}
 	}
 }
 
@@ -80,11 +83,11 @@ void UNexusVitalsWidget::BindToASC()
 		.AddUObject(this, &UNexusVitalsWidget::HandleMaxHealthChanged);
 
 	StaminaChangedHandle = ObservedASC
-		->GetGameplayAttributeValueChangeDelegate(UBasicAttributeSet::GetStaminaAttribute())
+		->GetGameplayAttributeValueChangeDelegate(UPlayerAttributeSet::GetStaminaAttribute())
 		.AddUObject(this, &UNexusVitalsWidget::HandleStaminaChanged);
 
 	MaxStaminaChangedHandle = ObservedASC
-		->GetGameplayAttributeValueChangeDelegate(UBasicAttributeSet::GetMaxStaminaAttribute())
+		->GetGameplayAttributeValueChangeDelegate(UPlayerAttributeSet::GetMaxStaminaAttribute())
 		.AddUObject(this, &UNexusVitalsWidget::HandleMaxStaminaChanged);
 }
 
@@ -101,10 +104,10 @@ void UNexusVitalsWidget::UnbindFromASC()
 	ObservedASC->GetGameplayAttributeValueChangeDelegate(UBasicAttributeSet::GetMaxHealthAttribute())
 		.Remove(MaxHealthChangedHandle);
 
-	ObservedASC->GetGameplayAttributeValueChangeDelegate(UBasicAttributeSet::GetStaminaAttribute())
+	ObservedASC->GetGameplayAttributeValueChangeDelegate(UPlayerAttributeSet::GetStaminaAttribute())
 		.Remove(StaminaChangedHandle);
 
-	ObservedASC->GetGameplayAttributeValueChangeDelegate(UBasicAttributeSet::GetMaxStaminaAttribute())
+	ObservedASC->GetGameplayAttributeValueChangeDelegate(UPlayerAttributeSet::GetMaxStaminaAttribute())
 		.Remove(MaxStaminaChangedHandle);
 
 	HealthChangedHandle.Reset();
@@ -122,8 +125,8 @@ void UNexusVitalsWidget::RefreshFromAttributes()
 
 	Health = ObservedASC->GetNumericAttribute(UBasicAttributeSet::GetHealthAttribute());
 	MaxHealth = ObservedASC->GetNumericAttribute(UBasicAttributeSet::GetMaxHealthAttribute());
-	Stamina = ObservedASC->GetNumericAttribute(UBasicAttributeSet::GetStaminaAttribute());
-	MaxStamina = ObservedASC->GetNumericAttribute(UBasicAttributeSet::GetMaxStaminaAttribute());
+	Stamina = ObservedASC->GetNumericAttribute(UPlayerAttributeSet::GetStaminaAttribute());
+	MaxStamina = ObservedASC->GetNumericAttribute(UPlayerAttributeSet::GetMaxStaminaAttribute());
 }
 
 void UNexusVitalsWidget::UpdateVitalsPercent()

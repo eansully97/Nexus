@@ -14,11 +14,10 @@ UCLASS()
 class NEXUS_API UBasicAttributeSet : public UAttributeSet
 {
 	GENERATED_BODY()
-public:
 
+public:
 	UBasicAttributeSet();
-	
-	// Health Attribute
+
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing=OnRep_Health)
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, Health)
@@ -27,26 +26,30 @@ public:
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, MaxHealth)
 
-	// Stamina Attribute
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing=OnRep_Stamina)
-	FGameplayAttributeData Stamina;
-	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, Stamina)
-	
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing=OnRep_MaxStamina)
-	FGameplayAttributeData MaxStamina;
-	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, MaxStamina)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Movement", ReplicatedUsing=OnRep_MoveSpeed)
+	FGameplayAttributeData MoveSpeed;
+	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, MoveSpeed)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Movement", ReplicatedUsing=OnRep_JumpVelocity)
+	FGameplayAttributeData JumpVelocity;
+	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, JumpVelocity)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Movement", ReplicatedUsing=OnRep_AirControl)
+	FGameplayAttributeData AirControl;
+	ATTRIBUTE_ACCESSORS_BASIC(UBasicAttributeSet, AirControl)
 
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, Health, OldHealth); }
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, MaxHealth, OldMaxHealth); }
 	UFUNCTION()
-	void OnRep_Stamina(const FGameplayAttributeData& OldStamina) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, Stamina, OldStamina); }
+	void OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, MoveSpeed, OldMoveSpeed); }
 	UFUNCTION()
-	void OnRep_MaxStamina(const FGameplayAttributeData& OldMaxStamina) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, MaxStamina, OldMaxStamina); }
+	void OnRep_JumpVelocity(const FGameplayAttributeData& OldJumpVelocity) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, JumpVelocity, OldJumpVelocity); }
+	UFUNCTION()
+	void OnRep_AirControl(const FGameplayAttributeData& OldAirControl) const { GAMEPLAYATTRIBUTE_REPNOTIFY(UBasicAttributeSet, AirControl, OldAirControl); }
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
-	
 };

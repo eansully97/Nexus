@@ -5,7 +5,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Nexus/Character/NexusCharacterBase.h"
-#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
+#include "Nexus/NexusGameplayTags.h"
 
 UGA_ShadowStrike::UGA_ShadowStrike()
 {
@@ -15,6 +15,7 @@ UGA_ShadowStrike::UGA_ShadowStrike()
 	bRequiresValidTarget = true;
 	bRequiresTargetInRange = true;
 	ActivationRange = 1200.f;
+	ActiveGameplayCueTag = NexusGameplayTags::GameplayCue_Ability_ShadowStrike_Activate;
 }
 
 void UGA_ShadowStrike::ActivateAbility(
@@ -29,7 +30,6 @@ void UGA_ShadowStrike::ActivateAbility(
 	CachedTargetCharacter = GetTargetCharacterFromEventData(TriggerEventData);
 	CachedTeleportLocation = FVector::ZeroVector;
 	bStrikeExecuted = false;
-	bCueActive = false;
 
 	if (!IsValid(CachedSourceCharacter) || !ActorInfo || !ActorInfo->AvatarActor.IsValid())
 	{
@@ -61,7 +61,7 @@ void UGA_ShadowStrike::ActivateAbility(
 		return;
 	}
 
-	StartShadowStrikeCue();
+	TriggerActivationGameplayCues();
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this,
@@ -103,7 +103,7 @@ void UGA_ShadowStrike::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	StopShadowStrikeCue();
+	ClearActiveGameplayCue();
 	Cleanup();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -233,57 +233,6 @@ void UGA_ShadowStrike::DamageTarget() const
 	CachedSourceCharacter->ApplyDamageToTarget(CachedTargetCharacter, Damage);
 }
 
-void UGA_ShadowStrike::StartShadowStrikeCue()
-{
-	if (bCueActive || !ShadowStrikeCueTag.IsValid())
-	{
-		return;
-	}
-
-	AActor* CueTarget = CachedSourceCharacter
-		? static_cast<AActor*>(CachedSourceCharacter)
-		: GetAvatarActorFromActorInfo();
-
-	if (!IsValid(CueTarget))
-	{
-		return;
-	}
-
-	if (UNexusAbilityFunctionLibrary::AddGameplayCueToActor(
-		CueTarget,
-		ShadowStrikeCueTag,
-		CueTarget,
-		CueTarget,
-		this))
-	{
-		bCueActive = true;
-	}
-}
-
-void UGA_ShadowStrike::StopShadowStrikeCue()
-{
-	if (!bCueActive || !ShadowStrikeCueTag.IsValid())
-	{
-		return;
-	}
-
-	AActor* CueTarget = CachedSourceCharacter
-		? static_cast<AActor*>(CachedSourceCharacter)
-		: GetAvatarActorFromActorInfo();
-
-	if (!IsValid(CueTarget))
-	{
-		bCueActive = false;
-		return;
-	}
-
-	UNexusAbilityFunctionLibrary::RemoveGameplayCueFromActor(
-		CueTarget,
-		ShadowStrikeCueTag);
-
-	bCueActive = false;
-}
-
 void UGA_ShadowStrike::ExecuteShadowStrike()
 {
 	if (bStrikeExecuted)
@@ -293,13 +242,13 @@ void UGA_ShadowStrike::ExecuteShadowStrike()
 
 	if (!IsValid(CachedSourceCharacter) || !IsValid(CachedTargetCharacter))
 	{
-		StopShadowStrikeCue();
+		ClearActiveGameplayCue();
 		return;
 	}
 
 	if (CachedTargetCharacter->GetIsDead())
 	{
-		StopShadowStrikeCue();
+		ClearActiveGameplayCue();
 		return;
 	}
 
@@ -308,7 +257,7 @@ void UGA_ShadowStrike::ExecuteShadowStrike()
 
 	if (!bFoundFreshTeleportLocation && TeleportLocation.IsNearlyZero())
 	{
-		StopShadowStrikeCue();
+		ClearActiveGameplayCue();
 		return;
 	}
 
@@ -322,7 +271,7 @@ void UGA_ShadowStrike::ExecuteShadowStrike()
 	DamageTarget();
 
 	bStrikeExecuted = true;
-	StopShadowStrikeCue();
+	ClearActiveGameplayCue();
 }
 
 void UGA_ShadowStrike::OnTeleportDelayFinished()
@@ -368,5 +317,4 @@ void UGA_ShadowStrike::Cleanup()
 	CachedTargetCharacter = nullptr;
 	CachedTeleportLocation = FVector::ZeroVector;
 	bStrikeExecuted = false;
-	bCueActive = false;
 }

@@ -58,6 +58,12 @@ void ANexusMeleeWeaponBase::EndHitscan()
 	ServerEndHitscan();
 }
 
+void ANexusMeleeWeaponBase::ConfigureHitscanWindow(float InDamageHitScanRadius, float InDamageToDeal)
+{
+	DamageHitScanRadius = InDamageHitScanRadius;
+	DamageToDeal = InDamageToDeal;
+}
+
 void ANexusMeleeWeaponBase::ServerStartHitscan_Implementation()
 {
 	StartHitscan_Internal();

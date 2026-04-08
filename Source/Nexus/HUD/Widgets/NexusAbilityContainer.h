@@ -7,7 +7,6 @@
 #include "Nexus/NexusEnumTypes.h"
 #include "NexusAbilityContainer.generated.h"
 
-
 class ANexusCharacterBase;
 class UAbilitySystemComponent;
 class UHorizontalBox;
@@ -24,10 +23,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Abilities")
 	void SetObservedPawn(APawn* NewPawn);
+
 	void BindAbilitiesChangedEvent();
 	void UnbindAbilitiesChangedEvent();
+
 	UFUNCTION()
 	void HandleAbilitiesChanged();
+
+	UFUNCTION()
+	void HandleDeferredRefresh();
 
 	UFUNCTION(BlueprintCallable, Category="Abilities")
 	void RefreshContainer();
@@ -51,6 +55,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities")
 	EAbilityContainerInfo ContainerType = EAbilityContainerInfo::None;
 
+	FTimerHandle DeferredRefreshTimerHandle;
+
 	void GetAbilitiesForContainer();
 	void RebuildContainer();
+
+	bool HasSameAbilitySet(const TArray<FGameplayAbilitySpecHandle>& NewHandles) const;
+
+private:
+	UPROPERTY()
+	TArray<FGameplayAbilitySpecHandle> LastBuiltAbilityHandles;
 };

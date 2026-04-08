@@ -1,4 +1,4 @@
-﻿#include "NexusAbilityEntryWidget.h"
+﻿#include "Nexus/HUD/Widgets/NexusAbilityEntryWidget.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -20,7 +20,6 @@ void UNexusAbilityEntryWidget::NativeDestruct()
 	{
 		World->GetTimerManager().ClearTimer(CooldownTimerHandle);
 		World->GetTimerManager().ClearTimer(ActiveStateTimerHandle);
-		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
 
 	Super::NativeDestruct();
@@ -38,7 +37,13 @@ void UNexusAbilityEntryWidget::InitializeAbilityEntry(
 	AbilitySpecHandle = InSpecHandle;
 	ObservedAbility = nullptr;
 	ObservedCooldownTags.Reset();
+	ObservedPlayerController = nullptr;
 	bHasValidTargetForObservedAbility = true;
+
+	if (const APawn* ObservedPawn = Cast<APawn>(ObservedActor))
+	{
+		ObservedPlayerController = Cast<ANexusPlayerController>(ObservedPawn->GetController());
+	}
 
 	RefreshFromAbility();
 	BindListeners();
@@ -98,6 +103,32 @@ void UNexusAbilityEntryWidget::UnbindCooldownListeners()
 	ObservedCooldownTags.Reset();
 }
 
+void UNexusAbilityEntryWidget::BindTargetingListener()
+{
+	UnbindTargetingListener();
+
+	if (!ObservedPlayerController || !ObservedAbility || !DoesAbilityNeedValidTarget())
+	{
+		return;
+	}
+
+	ObservedPlayerController->OnControllerTargetChanged.AddDynamic(
+		this,
+		&ThisClass::HandleControllerTargetChanged);
+}
+
+void UNexusAbilityEntryWidget::UnbindTargetingListener()
+{
+	if (!ObservedPlayerController)
+	{
+		return;
+	}
+
+	ObservedPlayerController->OnControllerTargetChanged.RemoveDynamic(
+		this,
+		&ThisClass::HandleControllerTargetChanged);
+}
+
 void UNexusAbilityEntryWidget::UpdateAbilityBGColor(bool bIsActive) const
 {
 	if (!AbilityBG)
@@ -116,6 +147,8 @@ void UNexusAbilityEntryWidget::BindListeners()
 	}
 
 	BindCooldownListeners();
+	BindTargetingListener();
+
 	UpdateAbilityActiveState();
 	UpdateTargetRequirementState();
 
@@ -130,32 +163,21 @@ void UNexusAbilityEntryWidget::BindListeners()
 				ActiveStateRefreshRate,
 				true);
 		}
-
-		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
-
-		if (DoesAbilityNeedValidTarget())
-		{
-			World->GetTimerManager().SetTimer(
-				TargetStateTimerHandle,
-				this,
-				&UNexusAbilityEntryWidget::UpdateTargetRequirementState,
-				TargetStateRefreshRate,
-				true);
-		}
 	}
 }
 
 void UNexusAbilityEntryWidget::UnbindListeners()
 {
 	UnbindCooldownListeners();
+	UnbindTargetingListener();
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ActiveStateTimerHandle);
-		World->GetTimerManager().ClearTimer(TargetStateTimerHandle);
 	}
 
 	bHasValidTargetForObservedAbility = true;
+	ObservedPlayerController = nullptr;
 
 	if (TargetRequiredOverlay)
 	{
@@ -166,6 +188,11 @@ void UNexusAbilityEntryWidget::UnbindListeners()
 void UNexusAbilityEntryWidget::HandleCooldownGameplayTagChanged(const FGameplayTag GameplayTag, int32 NewCount)
 {
 	UpdateCooldownProgress();
+}
+
+void UNexusAbilityEntryWidget::HandleControllerTargetChanged(ANexusCharacterBase* NewTarget, bool bHasValidTarget)
+{
+	UpdateTargetRequirementState();
 }
 
 void UNexusAbilityEntryWidget::RefreshFromAbility()
@@ -342,7 +369,7 @@ void UNexusAbilityEntryWidget::UpdateTargetRequirementState()
 
 	bHasValidTargetForObservedAbility = bHasValidTargetForAbility;
 
-	if (TargetRequiredOverlay)
+	if (TargetRequiredOverlay && (!CooldownOverlay || !CooldownOverlay->IsVisible()))
 	{
 		TargetRequiredOverlay->SetVisibility(
 			bHasValidTargetForAbility

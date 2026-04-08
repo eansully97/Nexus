@@ -16,9 +16,18 @@ class UNexusEffectSet : public UDataAsset
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TSubclassOf<UGameplayEffect> StunEffect;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TSubclassOf<UGameplayEffect> StunEffect = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TSubclassOf<UGameplayEffect> DamageEffect;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TSubclassOf<UGameplayEffect> InstantDamageEffect = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TSubclassOf<UGameplayEffect> DamageWithDurationEffect = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TSubclassOf<UGameplayEffect> InstantHealEffect = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Effects")
+	TSubclassOf<UGameplayEffect> HealWithDurationEffect = nullptr;
 };

@@ -289,6 +289,12 @@ const TArray<TObjectPtr<ANexusMinionBase>>& ANexusCapturePoint::GetMinionArrayFo
 
 void ANexusCapturePoint::EvaluateControl(float DeltaTime)
 {
+	const ANexusGameMode* NexusGameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ANexusGameMode>() : nullptr;
+	if (!NexusGameMode || NexusGameMode->GetMatchState() != MatchState::InProgress)
+	{
+		return;
+	}
+
 	CleanupInvalidMinions();
 
 	const int32 TeamACount = GetValidMinionCountForTeam(ENexusTeamID::TeamA);

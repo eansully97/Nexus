@@ -1,20 +1,34 @@
 ﻿#include "NexusMinionBase.h"
 
+#include "Animation/AnimInstance.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/GameMode/CapturePoints/CapturePoint.h"
+#include "Nexus/GameplayAbilitySystem/Abilities/GA_Minion_Attack.h"
+
+namespace
+{
+	const TCHAR* TeamAMeshPath =
+		TEXT("/Game/ParagonMinions/Characters/Minions/Down_Minions/Meshes/Minion_Lane_Melee_Dawn.Minion_Lane_Melee_Dawn");
+	const TCHAR* TeamBMeshPath =
+		TEXT("/Game/ParagonMinions/Characters/Minions/Dusk_Minions/Meshes/Minion_Lane_Melee_Dusk.Minion_Lane_Melee_Dusk");
+	const TCHAR* MinionAnimClassPath =
+		TEXT("/Game/Nexus/Characters/Enemies/Animations/ABP_Minion.ABP_Minion_C");
+}
 
 ANexusMinionBase::ANexusMinionBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	DefaultAttackAbilityClass = UGA_Minion_Attack::StaticClass();
 }
 
 void ANexusMinionBase::BeginPlay()
 {
 	Super::BeginPlay();
+	EnsureDefaultVisualSetup();
 
 	if (HasAuthority())
 	{
@@ -48,7 +62,27 @@ void ANexusMinionBase::InitializeCombatLoadout()
 
 TArray<FNexusAbilityGrant> ANexusMinionBase::GetClassAbilitiesToGrant() const
 {
-	return MinionAbilityGrants;
+	TArray<FNexusAbilityGrant> Result = AdditionalMinionAbilityGrants;
+
+	if (DefaultAttackAbilityClass)
+	{
+		const bool bAlreadyHasDefaultAttack =
+			Result.ContainsByPredicate(
+				[this](const FNexusAbilityGrant& Grant)
+				{
+					return Grant.Ability == DefaultAttackAbilityClass;
+				});
+
+		if (!bAlreadyHasDefaultAttack)
+		{
+			FNexusAbilityGrant DefaultAttackGrant;
+			DefaultAttackGrant.Ability = DefaultAttackAbilityClass;
+			DefaultAttackGrant.AbilityLevel = FMath::Max(DefaultAttackAbilityLevel, 1);
+			Result.Add(DefaultAttackGrant);
+		}
+	}
+
+	return Result;
 }
 
 void ANexusMinionBase::OnRep_CurrentTarget()
@@ -79,6 +113,7 @@ void ANexusMinionBase::StartHitscan()
 		HitscanInterval,
 		true
 	);
+	RotateTowardsCurrentTargetForHitscan(HitscanInterval);
 }
 
 void ANexusMinionBase::EndHitscan()
@@ -272,29 +307,69 @@ void ANexusMinionBase::ApplyTeamVisuals() const
 {
 	Super::ApplyTeamVisuals();
 
+	ANexusMinionBase* MutableThis = const_cast<ANexusMinionBase*>(this);
+	MutableThis->EnsureDefaultVisualSetup();
+
 	if (!GetMesh())
 	{
 		return;
 	}
 
+	if (USkeletalMesh* DesiredMesh = MutableThis->GetDesiredTeamMesh())
+	{
+		GetMesh()->SetSkeletalMeshAsset(DesiredMesh);
+	}
+}
+
+void ANexusMinionBase::EnsureDefaultVisualSetup()
+{
+	if (!TeamAMesh)
+	{
+		TeamAMesh = LoadObject<USkeletalMesh>(nullptr, TeamAMeshPath);
+	}
+
+	if (!TeamBMesh)
+	{
+		TeamBMesh = LoadObject<USkeletalMesh>(nullptr, TeamBMeshPath);
+	}
+
+	if (!MinionAnimClass)
+	{
+		MinionAnimClass = LoadClass<UAnimInstance>(nullptr, MinionAnimClassPath);
+	}
+
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp)
+	{
+		return;
+	}
+
+	if (!MeshComp->GetSkeletalMeshAsset())
+	{
+		if (USkeletalMesh* DesiredMesh = GetDesiredTeamMesh())
+		{
+			MeshComp->SetSkeletalMeshAsset(DesiredMesh);
+		}
+	}
+
+	if (MinionAnimClass && MeshComp->GetAnimClass() != MinionAnimClass)
+	{
+		MeshComp->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		MeshComp->SetAnimInstanceClass(MinionAnimClass);
+	}
+}
+
+USkeletalMesh* ANexusMinionBase::GetDesiredTeamMesh() const
+{
 	switch (TeamID)
 	{
-	case ENexusTeamID::TeamA:
-		if (TeamAMesh)
-		{
-			GetMesh()->SetSkeletalMeshAsset(TeamAMesh);
-		}
-		break;
-
 	case ENexusTeamID::TeamB:
-		if (TeamBMesh)
-		{
-			GetMesh()->SetSkeletalMeshAsset(TeamBMesh);
-		}
-		break;
+		return TeamBMesh ? TeamBMesh.Get() : TeamAMesh.Get();
 
+	case ENexusTeamID::TeamA:
+	case ENexusTeamID::Neutral:
 	default:
-		break;
+		return TeamAMesh ? TeamAMesh.Get() : TeamBMesh.Get();
 	}
 }
 

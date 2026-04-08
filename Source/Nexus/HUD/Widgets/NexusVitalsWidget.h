@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Nexus/GameplayAbilitySystem/AttributeSet/BasicAttributeSet.h"
+#include "Nexus/GameplayAbilitySystem/AttributeSet/PlayerAttributeSet.h"
 #include "NexusVitalsWidget.generated.h"
 
 class ANexusCharacterBase;
@@ -25,6 +26,8 @@ public:
 	void SetObservedPawn(APawn* NewPawn);
 
 protected:
+	virtual bool ShouldAutoObserveOwningPawn() const { return true; }
+
 	UPROPERTY(BlueprintReadOnly, Category="Vitals")
 	TObjectPtr<ANexusCharacterBase> ObservedCharacter;
 

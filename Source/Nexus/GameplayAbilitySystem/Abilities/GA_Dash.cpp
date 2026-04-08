@@ -4,11 +4,12 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Nexus/Character/NexusCharacterBase.h"
-#include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
+#include "Nexus/NexusGameplayTags.h"
 
 UGA_Dash::UGA_Dash()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	ActiveGameplayCueTag = NexusGameplayTags::GameplayCue_Ability_Dash_Activate;
 }
 
 void UGA_Dash::ActivateAbility(
@@ -38,7 +39,7 @@ void UGA_Dash::ActivateAbility(
 	// Preserve the old Blueprint behavior:
 	// spend cost when dash starts, apply cooldown when dash ends.
 	ApplyCostSetByCaller();
-	AddDashCue();
+	TriggerActivationGameplayCues();
 
 	RootMotionTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 		this,
@@ -55,7 +56,6 @@ void UGA_Dash::ActivateAbility(
 
 	if (!RootMotionTask)
 	{
-		RemoveDashCue();
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -67,7 +67,6 @@ void UGA_Dash::ActivateAbility(
 	WaitDelayTask = UAbilityTask_WaitDelay::WaitDelay(this, DashDuration);
 	if (!WaitDelayTask)
 	{
-		RemoveDashCue();
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -107,45 +106,6 @@ FVector UGA_Dash::GetDashDirection() const
 	return InputDirection.GetSafeNormal();
 }
 
-void UGA_Dash::AddDashCue()
-{
-	if (!DashCueTag.IsValid())
-	{
-		return;
-	}
-
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!IsValid(AvatarActor))
-	{
-		return;
-	}
-
-	UNexusAbilityFunctionLibrary::AddGameplayCueToActor(
-		AvatarActor,
-		DashCueTag,
-		AvatarActor,
-		AvatarActor,
-		this);
-}
-
-void UGA_Dash::RemoveDashCue()
-{
-	if (!DashCueTag.IsValid())
-	{
-		return;
-	}
-
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!IsValid(AvatarActor))
-	{
-		return;
-	}
-
-	UNexusAbilityFunctionLibrary::RemoveGameplayCueFromActor(
-		AvatarActor,
-		DashCueTag);
-}
-
 void UGA_Dash::CleanupTasks()
 {
 	if (WaitDelayTask)
@@ -168,8 +128,6 @@ void UGA_Dash::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	RemoveDashCue();
-
 	if (!bHasAppliedCooldown)
 	{
 		ApplyCooldownSetByCaller();

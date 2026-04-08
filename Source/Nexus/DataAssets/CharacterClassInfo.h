@@ -6,6 +6,8 @@
 #include "CharacterClassInfo.generated.h"
 
 class ANexusWeaponBase;
+class UMaterialInterface;
+class USkeletalMesh;
 
 UENUM(BlueprintType)
 enum class ECharacterClassName : uint8
@@ -14,6 +16,18 @@ enum class ECharacterClassName : uint8
 	Warrior,
 	Mage,
 	Rogue
+};
+
+USTRUCT(BlueprintType)
+struct FNexusClassCharacterData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Character")
+	TObjectPtr<USkeletalMesh> CharacterMesh = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Character")
+	TArray<TObjectPtr<UMaterialInterface>> CharacterMaterialOverrides;
 };
 
 UCLASS()
@@ -40,6 +54,12 @@ public:
 	// If empty, DefaultWeaponClass is the only legal option.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Class|Weapons")
 	TArray<TSubclassOf<ANexusWeaponBase>> AllowedWeaponClasses;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Class|Character")
+	FNexusClassCharacterData CharacterData;
+
+	UFUNCTION(BlueprintPure, Category="Class|Character")
+	USkeletalMesh* GetResolvedCharacterMesh() const;
 
 	UFUNCTION(BlueprintPure, Category="Class|Weapons")
 	bool IsWeaponAllowed(TSubclassOf<ANexusWeaponBase> WeaponClass) const;

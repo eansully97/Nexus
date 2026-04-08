@@ -29,6 +29,7 @@ bool UNexusGameplayAbility::CommitAbilityWithSetByCaller(
 	ApplyCooldownSetByCaller(CooldownDuration);
 
 	CommitExecute(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo);
+	TriggerActivationGameplayCues();
 	return true;
 }
 
@@ -154,6 +155,119 @@ bool UNexusGameplayAbility::ApplySetByCallerEffectToOwner(
 	return true;
 }
 
+bool UNexusGameplayAbility::TriggerActivationGameplayCues()
+{
+	AActor* CueTarget = GetGameplayCueTargetActor();
+	if (!IsValid(CueTarget))
+	{
+		return false;
+	}
+
+	AActor* InstigatorActor = GetGameplayCueInstigatorActor();
+	AActor* EffectCauserActor = GetGameplayCueEffectCauserActor();
+	UObject* SourceObject = GetGameplayCueSourceObject();
+
+	bool bTriggeredAnyCue = false;
+
+	if (!bActivationGameplayCueExecuted && ActivateGameplayCueTag.IsValid())
+	{
+		bTriggeredAnyCue |= UNexusAbilityFunctionLibrary::ExecuteGameplayCueOnActor(
+			CueTarget,
+			ActivateGameplayCueTag,
+			InstigatorActor,
+			EffectCauserActor,
+			SourceObject);
+		bActivationGameplayCueExecuted = true;
+	}
+
+	if (!bActiveGameplayCueApplied && ActiveGameplayCueTag.IsValid())
+	{
+		bActiveGameplayCueApplied = UNexusAbilityFunctionLibrary::AddGameplayCueToActor(
+			CueTarget,
+			ActiveGameplayCueTag,
+			InstigatorActor,
+			EffectCauserActor,
+			SourceObject);
+		bTriggeredAnyCue |= bActiveGameplayCueApplied;
+	}
+
+	return bTriggeredAnyCue;
+}
+
+void UNexusGameplayAbility::ClearActiveGameplayCue()
+{
+	if (!bActiveGameplayCueApplied || !ActiveGameplayCueTag.IsValid())
+	{
+		bActiveGameplayCueApplied = false;
+		return;
+	}
+
+	if (AActor* CueTarget = GetGameplayCueTargetActor())
+	{
+		UNexusAbilityFunctionLibrary::RemoveGameplayCueFromActor(CueTarget, ActiveGameplayCueTag);
+	}
+
+	bActiveGameplayCueApplied = false;
+}
+
+AActor* UNexusGameplayAbility::GetGameplayCueTargetActor() const
+{
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (IsValid(AvatarActor))
+	{
+		return AvatarActor;
+	}
+
+	return GetOwningActorFromActorInfo();
+}
+
+AActor* UNexusGameplayAbility::GetGameplayCueInstigatorActor() const
+{
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (IsValid(AvatarActor))
+	{
+		return AvatarActor;
+	}
+
+	return GetOwningActorFromActorInfo();
+}
+
+AActor* UNexusGameplayAbility::GetGameplayCueEffectCauserActor() const
+{
+	return GetGameplayCueInstigatorActor();
+}
+
+UObject* UNexusGameplayAbility::GetGameplayCueSourceObject() const
+{
+	return const_cast<UNexusGameplayAbility*>(this);
+}
+
+void UNexusGameplayAbility::ExecuteEndGameplayCue(bool bWasCancelled)
+{
+	if (!EndGameplayCueTag.IsValid())
+	{
+		return;
+	}
+
+	if (bWasCancelled && !bExecuteEndGameplayCueOnCancel)
+	{
+		return;
+	}
+
+	AActor* CueTarget = GetGameplayCueTargetActor();
+	if (!IsValid(CueTarget))
+	{
+		return;
+	}
+
+	UNexusAbilityFunctionLibrary::ExecuteGameplayCueOnActor(
+		CueTarget,
+		EndGameplayCueTag,
+		GetGameplayCueInstigatorActor(),
+		GetGameplayCueEffectCauserActor(),
+		GetGameplayCueSourceObject());
+}
+
 void UNexusGameplayAbility::ApplyCooldownSetByCaller(float InDuration)
 {
 	if (!CostAndCooldownConfig || !CostAndCooldownConfig->CooldownEffectClass)
@@ -205,5 +319,9 @@ void UNexusGameplayAbility::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	ClearActiveGameplayCue();
+	ExecuteEndGameplayCue(bWasCancelled);
+	bActivationGameplayCueExecuted = false;
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -2,15 +2,13 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "NexusAbilityEntryWidget.h"
-#include "Abilities/Async/AbilityAsync_WaitGameplayEvent.h"
-#include "Abilities/Async/AbilityAsync_WaitGameplayTagCountChanged.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "GameFramework/Pawn.h"
+#include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Nexus/Character/NexusCharacterBase.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
+#include "Nexus/HUD/Widgets/NexusAbilityEntryWidget.h"
 
 void UNexusAbilityContainer::NativeConstruct()
 {
@@ -29,6 +27,12 @@ void UNexusAbilityContainer::NativeConstruct()
 void UNexusAbilityContainer::NativeDestruct()
 {
 	UnbindAbilitiesChangedEvent();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DeferredRefreshTimerHandle);
+	}
+
 	Super::NativeDestruct();
 }
 
@@ -45,6 +49,7 @@ void UNexusAbilityContainer::SetObservedPawn(APawn* NewPawn)
 
 	ObservedCharacter = NewCharacter;
 	ObservedASC = nullptr;
+	LastBuiltAbilityHandles.Reset();
 
 	if (ObservedCharacter)
 	{
@@ -53,6 +58,17 @@ void UNexusAbilityContainer::SetObservedPawn(APawn* NewPawn)
 	}
 
 	RefreshContainer();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DeferredRefreshTimerHandle);
+		World->GetTimerManager().SetTimer(
+			DeferredRefreshTimerHandle,
+			this,
+			&ThisClass::HandleDeferredRefresh,
+			0.05f,
+			false);
+	}
 }
 
 void UNexusAbilityContainer::BindAbilitiesChangedEvent()
@@ -64,7 +80,7 @@ void UNexusAbilityContainer::BindAbilitiesChangedEvent()
 		return;
 	}
 
-	ObservedCharacter->OnCombatStateChanged.AddDynamic(
+	ObservedCharacter->OnGrantedAbilitiesChanged.AddDynamic(
 		this,
 		&UNexusAbilityContainer::HandleAbilitiesChanged
 	);
@@ -77,13 +93,18 @@ void UNexusAbilityContainer::UnbindAbilitiesChangedEvent()
 		return;
 	}
 
-	ObservedCharacter->OnCombatStateChanged.RemoveDynamic(
+	ObservedCharacter->OnGrantedAbilitiesChanged.RemoveDynamic(
 		this,
 		&UNexusAbilityContainer::HandleAbilitiesChanged
 	);
 }
 
 void UNexusAbilityContainer::HandleAbilitiesChanged()
+{
+	RefreshContainer();
+}
+
+void UNexusAbilityContainer::HandleDeferredRefresh()
 {
 	RefreshContainer();
 }
@@ -110,13 +131,17 @@ void UNexusAbilityContainer::GetAbilitiesForContainer()
 	{
 		bool bIsInstance = false;
 		const UGameplayAbility* BaseAbility =
-			UAbilitySystemBlueprintLibrary::GetGameplayAbilityFromSpecHandle(ObservedASC, SpecHandle, bIsInstance);
+			UAbilitySystemBlueprintLibrary::GetGameplayAbilityFromSpecHandle(
+				ObservedASC,
+				SpecHandle,
+				bIsInstance);
 
 		const UNexusGameplayAbility* NexusAbility = Cast<UNexusGameplayAbility>(BaseAbility);
 		if (!NexusAbility)
 		{
 			continue;
 		}
+
 		if (AbilitiesForContainer.Contains(SpecHandle))
 		{
 			continue;
@@ -129,6 +154,24 @@ void UNexusAbilityContainer::GetAbilitiesForContainer()
 	}
 }
 
+bool UNexusAbilityContainer::HasSameAbilitySet(const TArray<FGameplayAbilitySpecHandle>& NewHandles) const
+{
+	if (LastBuiltAbilityHandles.Num() != NewHandles.Num())
+	{
+		return false;
+	}
+
+	for (int32 Index = 0; Index < NewHandles.Num(); ++Index)
+	{
+		if (LastBuiltAbilityHandles[Index] != NewHandles[Index])
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void UNexusAbilityContainer::RebuildContainer()
 {
 	if (!AbilityContainer)
@@ -136,10 +179,23 @@ void UNexusAbilityContainer::RebuildContainer()
 		return;
 	}
 
+	if (!ObservedASC)
+	{
+		AbilityContainer->ClearChildren();
+		LastBuiltAbilityHandles.Reset();
+		return;
+	}
+
+	if (HasSameAbilitySet(AbilitiesForContainer))
+	{
+		return;
+	}
+
 	AbilityContainer->ClearChildren();
 
-	if (!AbilityEntryWidgetClass || !ObservedASC || !GetOwningPlayer())
+	if (!AbilityEntryWidgetClass || !GetOwningPlayer())
 	{
+		LastBuiltAbilityHandles.Reset();
 		return;
 	}
 
@@ -153,11 +209,13 @@ void UNexusAbilityContainer::RebuildContainer()
 			continue;
 		}
 
-		EntryWidget->InitializeAbilityEntry(ObservedCharacter,ObservedASC, SpecHandle);
+		EntryWidget->InitializeAbilityEntry(ObservedCharacter, ObservedASC, SpecHandle);
 
-		if (UHorizontalBoxSlot* Container = AbilityContainer->AddChildToHorizontalBox(EntryWidget))
+		if (UHorizontalBoxSlot* ContainerSlot = AbilityContainer->AddChildToHorizontalBox(EntryWidget))
 		{
-			Container->SetPadding(FMargin(5.f));
+			ContainerSlot->SetPadding(FMargin(5.f));
 		}
 	}
+
+	LastBuiltAbilityHandles = AbilitiesForContainer;
 }

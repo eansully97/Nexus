@@ -8,6 +8,7 @@
 
 class UCostAndCooldownConfig;
 class UAbilityInfo;
+class AActor;
 class ANexusCharacterBase;
 class ANexusPlayerCharacter;
 class ANexusPlayerController;
@@ -102,7 +103,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Nexus|Ability")
 	void ApplyCostSetByCaller(float InCostAmount = -1.f);
 
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability|GameplayCue")
+	bool TriggerActivationGameplayCues();
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability|GameplayCue")
+	void ClearActiveGameplayCue();
+
 protected:
+	virtual AActor* GetGameplayCueTargetActor() const;
+	virtual AActor* GetGameplayCueInstigatorActor() const;
+	virtual AActor* GetGameplayCueEffectCauserActor() const;
+	virtual UObject* GetGameplayCueSourceObject() const;
+
 	virtual void EndAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -114,4 +126,25 @@ protected:
 		TSubclassOf<UGameplayEffect> EffectClass,
 		const FGameplayTag& DataTag,
 		float Magnitude) const;
+
+	void ExecuteEndGameplayCue(bool bWasCancelled);
+
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GameplayCue")
+	FGameplayTag ActivateGameplayCueTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GameplayCue")
+	FGameplayTag ActiveGameplayCueTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GameplayCue")
+	FGameplayTag EndGameplayCueTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GameplayCue")
+	bool bExecuteEndGameplayCueOnCancel = false;
+
+	UPROPERTY(Transient)
+	bool bActivationGameplayCueExecuted = false;
+
+	UPROPERTY(Transient)
+	bool bActiveGameplayCueApplied = false;
 };

@@ -1,6 +1,9 @@
-﻿#pragma once
+﻿// AbilityLibrary.h
+
+#pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayEffectTypes.h"
 #include "Engine/EngineTypes.h"
 #include "GameplayTagContainer.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
@@ -47,6 +50,7 @@ public:
 		const UNexusGameplayAbility* Ability,
 		ANexusCharacterBase*& OutTargetCharacter);
 
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability|Events", meta=(DefaultToSelf="SourceActor"))
 	static bool SendTargetedGameplayEventToActor(
 		AActor* SourceActor,
 		const FGameplayTag& EventTag,
@@ -96,4 +100,10 @@ public:
 		AActor* InstigatorActor = nullptr,
 		AActor* EffectCauserActor = nullptr,
 		UObject* OptionalSourceObject = nullptr);
+
+	UFUNCTION(BlueprintCallable, Category="Nexus|Ability|GameplayCue")
+	static bool ExecuteGameplayCueOnActorWithParams(
+		AActor* TargetActor,
+		const FGameplayTag& CueTag,
+		const FGameplayCueParameters& CueParameters);
 };

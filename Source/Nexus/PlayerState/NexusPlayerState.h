@@ -40,6 +40,35 @@ struct FNexusLoadout
 	TArray<FNexusAbilityGrant> SelectedClassAbilityGrants;
 };
 
+USTRUCT()
+struct FNexusReconnectPlayerSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString ReconnectToken;
+
+	UPROPERTY()
+	ENexusTeamID TeamID = ENexusTeamID::Neutral;
+
+	UPROPERTY()
+	FNexusLoadout Loadout;
+
+	UPROPERTY()
+	bool bSelectionLockedIn = false;
+
+	UPROPERTY()
+	TArray<FNexusPersistentCooldown> PersistentCooldowns;
+
+	UPROPERTY()
+	FGameplayTagContainer PersistentLooseTags;
+
+	bool IsValid() const
+	{
+		return !ReconnectToken.IsEmpty();
+	}
+};
+
 UCLASS()
 class NEXUS_API ANexusPlayerState : public APlayerState
 {
@@ -60,6 +89,9 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_SelectionLockedIn, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
 	bool bSelectionLockedIn = false;
 
+	UPROPERTY(ReplicatedUsing=OnRep_ReconnectToken, BlueprintReadOnly, Category="Profile", meta=(AllowPrivateAccess="true"))
+	FString ReconnectToken;
+
 	UPROPERTY()
 	TArray<FNexusPersistentCooldown> PersistentCooldowns;
 
@@ -75,8 +107,12 @@ protected:
 	UFUNCTION()
 	void OnRep_SelectionLockedIn();
 
+	UFUNCTION()
+	void OnRep_ReconnectToken();
+
 	void HandleProfileChanged();
 	void NormalizeCurrentLoadout();
+	void ClearReadyStateForLoadoutChange();
 
 	float GetRemainingPersistentCooldownTime(const FNexusPersistentCooldown& PersistentCooldown) const;
 
@@ -124,12 +160,23 @@ public:
 	UFUNCTION(BlueprintPure, Category="Profile")
 	bool GetSelectionLockedIn() const { return bSelectionLockedIn; }
 
+	UFUNCTION(BlueprintCallable, Category="Profile")
+	void SetReconnectToken(const FString& NewReconnectToken);
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	const FString& GetReconnectToken() const { return ReconnectToken; }
+
+	UFUNCTION(BlueprintPure, Category="Profile")
+	bool CanLockInSelection() const;
+
 	UFUNCTION(BlueprintPure, Category="Profile")
 	bool IsWeaponAllowedForCurrentClass(TSubclassOf<ANexusWeaponBase> WeaponClass) const;
 
 	void CapturePersistentCombatStateFromCharacter(ANexusCharacterBase* Character);
 	void ApplyPersistentCombatProfileToCharacter(ANexusCharacterBase* Character);
 	void TryApplyPersistentCooldownsToCharacter(ANexusCharacterBase* Character);
+	FNexusReconnectPlayerSnapshot BuildReconnectSnapshot() const;
+	void ApplyReconnectSnapshot(const FNexusReconnectPlayerSnapshot& Snapshot);
 
 	TArray<FNexusAbilityGrant> GetWeaponAbilityGrants() const;
 	TArray<FNexusAbilityGrant> GetClassAbilityGrants() const;

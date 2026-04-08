@@ -1,6 +1,5 @@
 ﻿#include "Nexus/PlayerState/NexusPlayerState.h"
 
-#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
@@ -8,6 +7,7 @@
 #include "Nexus/Character/Player/NexusPlayerCharacter.h"
 #include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/DataAssets/CostAndCooldownConfig.h"
+#include "Nexus/GameInstance/NexusGameInstance.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/Weapons/NexusWeaponBase.h"
 
@@ -77,6 +77,7 @@ void ANexusPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(ThisClass, TeamID);
 	DOREPLIFETIME(ThisClass, CurrentLoadout);
 	DOREPLIFETIME(ThisClass, bSelectionLockedIn);
+	DOREPLIFETIME_CONDITION(ThisClass, ReconnectToken, COND_OwnerOnly);
 }
 
 void ANexusPlayerState::SetTeamID(ENexusTeamID NewTeamID)
@@ -103,6 +104,7 @@ void ANexusPlayerState::SetCharacterClassInfo(UCharacterClassInfo* InInfo)
 
 	CurrentLoadout.SelectedClass = InInfo;
 	NormalizeCurrentLoadout();
+	ClearReadyStateForLoadoutChange();
 
 	if (HasAuthority())
 	{
@@ -119,6 +121,7 @@ void ANexusPlayerState::SetSelectedWeaponClass(TSubclassOf<ANexusWeaponBase> InW
 
 	CurrentLoadout.SelectedWeapon = InWeaponClass;
 	NormalizeCurrentLoadout();
+	ClearReadyStateForLoadoutChange();
 
 	if (HasAuthority())
 	{
@@ -130,6 +133,7 @@ void ANexusPlayerState::SetSelectedClassAbilityGrants(const TArray<FNexusAbility
 {
 	CurrentLoadout.SelectedClassAbilityGrants = InAbilityGrants;
 	NormalizeCurrentLoadout();
+	ClearReadyStateForLoadoutChange();
 
 	if (HasAuthority())
 	{
@@ -141,6 +145,7 @@ void ANexusPlayerState::SetLoadout(const FNexusLoadout& InLoadout)
 {
 	CurrentLoadout = InLoadout;
 	NormalizeCurrentLoadout();
+	ClearReadyStateForLoadoutChange();
 
 	if (HasAuthority())
 	{
@@ -150,17 +155,39 @@ void ANexusPlayerState::SetLoadout(const FNexusLoadout& InLoadout)
 
 void ANexusPlayerState::SetSelectionLockedIn(bool bLockedIn)
 {
-	if (bSelectionLockedIn == bLockedIn)
+	const bool bResolvedLockedIn = bLockedIn && CanLockInSelection();
+
+	if (bSelectionLockedIn == bResolvedLockedIn)
 	{
 		return;
 	}
 
-	bSelectionLockedIn = bLockedIn;
+	bSelectionLockedIn = bResolvedLockedIn;
 
 	if (HasAuthority())
 	{
 		HandleProfileChanged();
 	}
+}
+
+void ANexusPlayerState::SetReconnectToken(const FString& NewReconnectToken)
+{
+	if (ReconnectToken == NewReconnectToken)
+	{
+		return;
+	}
+
+	ReconnectToken = NewReconnectToken;
+
+	if (!ReconnectToken.IsEmpty())
+	{
+		OnRep_ReconnectToken();
+	}
+}
+
+bool ANexusPlayerState::CanLockInSelection() const
+{
+	return CurrentLoadout.SelectedClass != nullptr;
 }
 
 void ANexusPlayerState::OnRep_TeamID()
@@ -179,9 +206,33 @@ void ANexusPlayerState::OnRep_SelectionLockedIn()
 	HandleProfileChanged();
 }
 
+void ANexusPlayerState::OnRep_ReconnectToken()
+{
+	if (ReconnectToken.IsEmpty())
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UNexusGameInstance* GameInstance = World->GetGameInstance<UNexusGameInstance>())
+		{
+			GameInstance->CacheLocalReconnectToken(ReconnectToken);
+		}
+	}
+}
+
 void ANexusPlayerState::HandleProfileChanged()
 {
 	OnPlayerProfileChanged.Broadcast();
+}
+
+void ANexusPlayerState::ClearReadyStateForLoadoutChange()
+{
+	if (bSelectionLockedIn)
+	{
+		bSelectionLockedIn = false;
+	}
 }
 
 void ANexusPlayerState::NormalizeCurrentLoadout()
@@ -190,6 +241,7 @@ void ANexusPlayerState::NormalizeCurrentLoadout()
 	{
 		CurrentLoadout.SelectedWeapon = nullptr;
 		CurrentLoadout.SelectedClassAbilityGrants.Reset();
+		bSelectionLockedIn = false;
 		return;
 	}
 
@@ -451,15 +503,49 @@ void ANexusPlayerState::ApplyPersistentCombatProfileToCharacter(ANexusCharacterB
 	}
 
 	Character->SetTeamID(TeamID);
-	Character->RebuildCombatLoadout();
 
-	if (PersistentLooseTags.Num() > 0)
+	if (UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+		ASC && PersistentLooseTags.Num() > 0)
 	{
-		UAbilitySystemBlueprintLibrary::AddGameplayTags(
-			Character,
-			PersistentLooseTags,
-			EGameplayTagReplicationState::TagOnly);
+		for (const FGameplayTag& Tag : PersistentLooseTags)
+		{
+			if (Tag.IsValid() && !ASC->HasMatchingGameplayTag(Tag))
+			{
+				ASC->AddLooseGameplayTag(Tag);
+			}
+		}
 	}
 
 	TryApplyPersistentCooldownsToCharacter(Character);
+}
+
+FNexusReconnectPlayerSnapshot ANexusPlayerState::BuildReconnectSnapshot() const
+{
+	FNexusReconnectPlayerSnapshot Snapshot;
+	Snapshot.ReconnectToken = ReconnectToken;
+	Snapshot.TeamID = TeamID;
+	Snapshot.Loadout = CurrentLoadout;
+	Snapshot.bSelectionLockedIn = bSelectionLockedIn;
+	Snapshot.PersistentCooldowns = PersistentCooldowns;
+	Snapshot.PersistentLooseTags = PersistentLooseTags;
+	return Snapshot;
+}
+
+void ANexusPlayerState::ApplyReconnectSnapshot(const FNexusReconnectPlayerSnapshot& Snapshot)
+{
+	if (!Snapshot.IsValid())
+	{
+		return;
+	}
+
+	ReconnectToken = Snapshot.ReconnectToken;
+	TeamID = Snapshot.TeamID;
+	CurrentLoadout = Snapshot.Loadout;
+	PersistentCooldowns = Snapshot.PersistentCooldowns;
+	PersistentLooseTags = Snapshot.PersistentLooseTags;
+	NormalizeCurrentLoadout();
+	bSelectionLockedIn = Snapshot.bSelectionLockedIn && CanLockInSelection();
+
+	OnRep_ReconnectToken();
+	HandleProfileChanged();
 }

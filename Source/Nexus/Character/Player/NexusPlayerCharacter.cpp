@@ -1,31 +1,57 @@
 ﻿#include "Nexus/Character/Player/NexusPlayerCharacter.h"
 
-#include "AbilitySystemBlueprintLibrary.h"
+#include "Camera/CameraComponent.h"
+#include "GameplayEffect.h"
+#include "Components/InputComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Net/UnrealNetwork.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Nexus/NexusGameplayTags.h"
 #include "Nexus/Components/CharacterClassComponent.h"
+#include "Nexus/Components/CombatLoadoutComponent.h"
 #include "Nexus/Components/NexusEnhancedInputComponent.h"
 #include "Nexus/Components/NexusWeaponsManager.h"
 #include "Nexus/Controller/NexusPlayerController.h"
+#include "Nexus/DataAssets/InputConfigInfo.h"
 #include "Nexus/FunctionLibraries/NexusAbilityFunctionLibrary.h"
 #include "Nexus/GameMode/NexusGameMode.h"
 #include "Nexus/GameplayAbilitySystem/Abilities/NexusGameplayAbility.h"
 #include "Nexus/GameplayAbilitySystem/AbilitySystemComponent/NexusAbilitySystemComponent.h"
+#include "Nexus/GameplayAbilitySystem/AttributeSet/PlayerAttributeSet.h"
 #include "Nexus/PlayerState/NexusPlayerState.h"
-#include "Nexus/Weapons/NexusWeaponBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 ANexusPlayerCharacter::ANexusPlayerCharacter()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	WeaponsManager = CreateDefaultSubobject<UNexusWeaponsManager>(TEXT("WeaponsManager"));
 	WeaponsManager->SetIsReplicated(true);
 
 	ClassComponent = CreateDefaultSubobject<UCharacterClassComponent>(TEXT("CharacterClassComponent"));
 	ClassComponent->SetIsReplicated(true);
 
+	CombatLoadoutComponent = CreateDefaultSubobject<UCombatLoadoutComponent>(TEXT("CombatLoadoutComponent"));
+	PlayerAttributeSet = CreateDefaultSubobject<UPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
+
 	NexusEnhancedInputComponent = CreateDefaultSubobject<UNexusEnhancedInputComponent>(TEXT("NexusEnhancedInputComponent"));
+
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->TargetArmLength = 360.0f;
+	CameraBoom->SocketOffset = FVector(0.0f, 60.0f, 70.0f);
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bInheritPitch = true;
+	CameraBoom->bInheritYaw = true;
+	CameraBoom->bInheritRoll = false;
+	CameraBoom->bDoCollisionTest = true;
+
+	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
+	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	FollowCamera->bUsePawnControlRotation = false;
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -34,26 +60,48 @@ ANexusPlayerCharacter::ANexusPlayerCharacter()
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	MoveComp->bOrientRotationToMovement = true;
 	MoveComp->RotationRate.Yaw = 500.f;
+
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> DefaultPlayerVisualMeshFinder(
+		TEXT("/Game/Mixamo/T-Pose_UE.T-Pose_UE"));
+	if (DefaultPlayerVisualMeshFinder.Succeeded())
+	{
+		DefaultVisualCharacterMesh = DefaultPlayerVisualMeshFinder.Object;
+	}
+
+	ApplyDefaultVisualMesh();
+}
+
+void ANexusPlayerCharacter::InitializeAbilityActorInfo()
+{
+	Super::InitializeAbilityActorInfo();
+	BindPlayerAttributeDelegates();
+	RefreshStaminaRegenState();
+}
+
+void ANexusPlayerCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	PitchOffset = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
+}
+
+void ANexusPlayerCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+}
+
+void ANexusPlayerCharacter::OnRep_Controller()
+{
+	Super::OnRep_Controller();
 }
 
 void ANexusPlayerCharacter::InitializeFromPlayerState()
 {
 	Super::InitializeFromPlayerState();
 
-	ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
-	if (!PS)
+	if (CombatLoadoutComponent)
 	{
-		return;
-	}
-
-	if (ClassComponent)
-	{
-		ClassComponent->ApplyClassFromPlayerState(PS);
-	}
-
-	if (HasAuthority())
-	{
-		PS->ApplyPersistentCombatProfileToCharacter(this);
+		CombatLoadoutComponent->RefreshFromCurrentPlayerState();
 	}
 }
 
@@ -64,77 +112,22 @@ void ANexusPlayerCharacter::InitializeCombatLoadout()
 		return;
 	}
 
-	RebuildCombatLoadoutPlayerOnly();
+	if (CombatLoadoutComponent)
+	{
+		CombatLoadoutComponent->RefreshFromCurrentPlayerState();
+	}
 }
 
-void ANexusPlayerCharacter::RebuildCombatLoadoutPlayerOnly()
+void ANexusPlayerCharacter::PostInitializeComponents()
 {
-	ClearAbilitySet(ENexusAbilitySource::Class);
-
-	if (WeaponsManager)
-	{
-		WeaponsManager->UnequipCurrentWeapon();
-	}
-
-	const TArray<FNexusAbilityGrant> ClassGrants = GetClassAbilitiesToGrant();
-	if (ClassGrants.Num() > 0)
-	{
-		GrantAbilitySet(ENexusAbilitySource::Class, ClassGrants, this);
-	}
-
-	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
-	if (PS && WeaponsManager && PS->GetSelectedWeaponClass())
-	{
-		WeaponsManager->EquipOrSwap(PS->GetSelectedWeaponClass());
-	}
-
-	OnCombatStateChanged.Broadcast();
-}
-
-TArray<FNexusAbilityGrant> ANexusPlayerCharacter::GetClassAbilitiesToGrant() const
-{
-	const ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>();
-	return PS ? PS->GetClassAbilityGrants() : TArray<FNexusAbilityGrant>();
-}
-
-void ANexusPlayerCharacter::ApplyTeamVisuals() const
-{
-	Super::ApplyTeamVisuals();
-
-	USkeletalMeshComponent* MeshComp = GetMesh();
-	if (!MeshComp)
-	{
-		return;
-	}
-
-	UMaterialInstanceDynamic* MID0 = MeshComp->CreateDynamicMaterialInstance(0);
-	UMaterialInstanceDynamic* MID1 = MeshComp->CreateDynamicMaterialInstance(1);
-
-	if (!MID0 || !MID1)
-	{
-		return;
-	}
-
-	switch (TeamID)
-	{
-	case ENexusTeamID::TeamA:
-		MID0->SetVectorParameterValue(TEXT("Paint Tint"), TeamAColor1);
-		MID1->SetVectorParameterValue(TEXT("Paint Tint"), TeamAColor2);
-		break;
-
-	case ENexusTeamID::TeamB:
-		MID0->SetVectorParameterValue(TEXT("Paint Tint"), TeamBColor1);
-		MID1->SetVectorParameterValue(TEXT("Paint Tint"), TeamBColor2);
-		break;
-
-	default:
-		break;
-	}
+	Super::PostInitializeComponents();
+	ApplyDefaultVisualMesh();
 }
 
 void ANexusPlayerCharacter::ApplyDeathState_Server()
 {
 	Super::ApplyDeathState_Server();
+	RefreshStaminaRegenState();
 
 	if (ANexusPlayerState* PS = GetPlayerState<ANexusPlayerState>())
 	{
@@ -148,6 +141,101 @@ void ANexusPlayerCharacter::ApplyDeathState_Server()
 			GM->RequestRespawn(GetController(), RespawnTime);
 		}
 	}
+}
+
+void ANexusPlayerCharacter::ApplyDefaultVisualMesh()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp || !DefaultVisualCharacterMesh)
+	{
+		return;
+	}
+
+	if (ClassComponent && ClassComponent->HasAppliedClass())
+	{
+		return;
+	}
+
+	if (MeshComp->GetSkeletalMeshAsset() != DefaultVisualCharacterMesh)
+	{
+		MeshComp->SetSkeletalMeshAsset(DefaultVisualCharacterMesh);
+	}
+}
+
+void ANexusPlayerCharacter::BindPlayerAttributeDelegates()
+{
+	if (!AbilitySystemComponent || !PlayerAttributeSet)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		PlayerAttributeSet->GetStaminaAttribute()).RemoveAll(this);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		PlayerAttributeSet->GetMaxStaminaAttribute()).RemoveAll(this);
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		PlayerAttributeSet->GetStaminaAttribute()).AddUObject(this, &ThisClass::HandleStaminaAttributeChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		PlayerAttributeSet->GetMaxStaminaAttribute()).AddUObject(this, &ThisClass::HandleMaxStaminaAttributeChanged);
+}
+
+void ANexusPlayerCharacter::RefreshStaminaRegenState()
+{
+	if (!HasAuthority() || !AbilitySystemComponent || !PlayerAttributeSet)
+	{
+		return;
+	}
+
+	FGameplayTagContainer RegenGrantedTags;
+	RegenGrantedTags.AddTag(NexusGameplayTags::Status_Stamina_Regen);
+
+	const bool bWantsStaminaRegen =
+		!bIsDead &&
+		StaminaRegenEffect &&
+		PlayerAttributeSet->GetStamina() < PlayerAttributeSet->GetMaxStamina();
+	const bool bHasStaminaRegen =
+		AbilitySystemComponent->HasMatchingGameplayTag(NexusGameplayTags::Status_Stamina_Regen);
+
+	if (!bWantsStaminaRegen)
+	{
+		if (bHasStaminaRegen)
+		{
+			AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(RegenGrantedTags);
+		}
+
+		return;
+	}
+
+	if (bHasStaminaRegen)
+	{
+		return;
+	}
+
+	const UGameplayEffect* StaminaRegenEffectCDO = StaminaRegenEffect->GetDefaultObject<UGameplayEffect>();
+	if (!StaminaRegenEffectCDO)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddInstigator(this, this);
+	EffectContext.AddSourceObject(this);
+
+	AbilitySystemComponent->ApplyGameplayEffectToSelf(
+		StaminaRegenEffectCDO,
+		1.0f,
+		EffectContext);
+}
+
+void ANexusPlayerCharacter::HandleStaminaAttributeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshStaminaRegenState();
+}
+
+void ANexusPlayerCharacter::HandleMaxStaminaAttributeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshStaminaRegenState();
 }
 
 void ANexusPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -179,12 +267,6 @@ void ANexusPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	NexusInput->BindNativeAction(InputConfig, NexusGameplayTags::Input_Action_Jump, ETriggerEvent::Completed, this, &ThisClass::Input_JumpReleased);
 
 	NexusInput->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityPressed, &ThisClass::Input_AbilityReleased);
-}
-
-void ANexusPlayerCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, PitchOffset);
 }
 
 bool ANexusPlayerCharacter::ShouldBlockNativeInput() const
@@ -254,9 +336,14 @@ bool ANexusPlayerCharacter::TryResolveUsableTargetForAbility(
 		return false;
 	}
 
-	return PC->GetUsableTargetForAbility(AbilityCDO) != nullptr
-		? (OutTargetCharacter = PC->GetUsableTargetForAbility(AbilityCDO), true)
-		: false;
+	ANexusCharacterBase* ResolvedTarget = PC->GetUsableTargetForAbility(AbilityCDO);
+	if (!ResolvedTarget)
+	{
+		return false;
+	}
+
+	OutTargetCharacter = ResolvedTarget;
+	return true;
 }
 
 bool ANexusPlayerCharacter::TrySendAbilityGameplayEvent(FGameplayTag InputTag)
@@ -379,19 +466,6 @@ void ANexusPlayerCharacter::Input_Look(const FInputActionValue& Value)
 
 	AddControllerYawInput(LookAxis.X * AppliedSensitivity);
 	AddControllerPitchInput(LookAxis.Y * AppliedSensitivity);
-
-	const float Pitch = GetControlRotation().Pitch;
-	Server_SetPitch(Pitch);
-}
-
-void ANexusPlayerCharacter::Server_SetPitch_Implementation(float InPitch)
-{
-	Multicast_SetPitch(InPitch);
-}
-
-void ANexusPlayerCharacter::Multicast_SetPitch_Implementation(float InPitch)
-{
-	PitchOffset = InPitch;
 }
 
 void ANexusPlayerCharacter::Input_JumpPressed(const FInputActionValue& Value)

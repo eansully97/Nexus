@@ -8,6 +8,7 @@
 class ANexusCapturePoint;
 class ANexusCharacterBase;
 class UNexusGameplayAbility;
+class UAnimInstance;
 class USkeletalMesh;
 
 UCLASS()
@@ -68,7 +69,13 @@ protected:
 	virtual TArray<FNexusAbilityGrant> GetClassAbilitiesToGrant() const override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
-	TArray<FNexusAbilityGrant> MinionAbilityGrants;
+	TArray<FNexusAbilityGrant> AdditionalMinionAbilityGrants;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
+	TSubclassOf<UNexusGameplayAbility> DefaultAttackAbilityClass = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AbilitySystem")
+	int32 DefaultAttackAbilityLevel = 1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AbilitySystem")
 	bool bMinionLoadoutInitialized = false;
@@ -94,8 +101,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Visual")
 	TObjectPtr<USkeletalMesh> TeamBMesh = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Visual")
+	TSubclassOf<UAnimInstance> MinionAnimClass = nullptr;
+
 	FTimerHandle TargetScanTimerHandle;
 	bool bAtCapturePoint = false;
+
+	void EnsureDefaultVisualSetup();
+	USkeletalMesh* GetDesiredTeamMesh() const;
 
 	void StartTargetScan();
 	void StopTargetScan();

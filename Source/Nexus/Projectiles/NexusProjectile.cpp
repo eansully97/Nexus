@@ -59,12 +59,23 @@ void ANexusProjectile::InitializeProjectile(
 	SourceASC = InSourceASC;
 	Damage = InDamage;
 
+	if (InSourceActor)
+	{
+		SetOwner(InSourceActor);
+		SetInstigator(Cast<APawn>(InSourceActor));
+	}
+
 	ReplicatedInitialDirection = InDirection.GetSafeNormal();
 	ReplicatedInitialSpeed = InSpeed;
 
 	if (CollisionSphere && InSourceActor)
 	{
 		CollisionSphere->IgnoreActorWhenMoving(InSourceActor, true);
+
+		if (APawn* SourcePawn = Cast<APawn>(InSourceActor))
+		{
+			CollisionSphere->IgnoreActorWhenMoving(SourcePawn, true);
+		}
 	}
 
 	if (ProjectileMovement)

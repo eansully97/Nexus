@@ -15,6 +15,8 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Movement_Dash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Damage_AOE_ArcanePulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Buff_Enrage);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Swing);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Axe_Deflect);
@@ -23,7 +25,7 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Dagger_ShadowStrike);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Staff_Fireball);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Staff_ArcanePulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Weapon_Staff_Repulse);
 	
 
 	// -------------------------
@@ -33,9 +35,11 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Enemy_Attack);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Dash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_ArcanePulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Enrage);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Staff_Fireball);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Staff_ArcanePulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Staff_Repulse);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Dagger_Slash);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Dagger_ShadowStrike);
@@ -58,6 +62,8 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Updated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Dash_Avtivated);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Repulse_Avtivated);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_ShadowStrike_Activated);
@@ -81,6 +87,8 @@ namespace NexusGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Heal_Burst);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_Dash_Activate);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_Repulse_Activate);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ability_ShadowStrike_Activate);
 	

@@ -8,6 +8,8 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Movement_Dash, "Ability.Movement.Dash");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Damage_AOE_ArcanePulse, "Ability.Damage.AOE.ArcanePulse")
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Buff_Enrage, "Ability.Buff.Enrage");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Swing, "Ability.Weapon.Axe.Swing");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Axe_Deflect, "Ability.Weapon.Axe.Deflect");
@@ -16,7 +18,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Dagger_ShadowStrike, "Ability.Weapon.Dagger.ShadowStrike");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Staff_Fireball, "Ability.Weapon.Staff.Fireball");
-	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Staff_ArcanePulse, "Ability.Weapon.Staff.ArcanePulse");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Weapon_Staff_Repulse, "Ability.Weapon.Staff.Repulse");
 
 	// -------------------------
 	// Cooldown
@@ -24,6 +26,8 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Enemy_Attack, "Cooldown.Enemy.Attack");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Ability_Dash, "Cooldown.Ability.Dash");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Ability_Enrage, "Cooldown.Ability.Enrage");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Ability_ArcanePulse, "Cooldown.Ability.ArcanePulse");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe_Swing, "Cooldown.Weapon.Axe.Swing");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe_Deflect, "Cooldown.Weapon.Axe.Deflect");
@@ -32,7 +36,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Dagger_ShadowStrike, "Cooldown.Weapon.Dagger.ShadowStrike");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Staff_Fireball, "Cooldown.Weapon.Staff.Fireball");
-	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Staff_ArcanePulse, "Cooldown.Weapon.Staff.ArcanePulse");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Staff_Repulse, "Cooldown.Weapon.Staff.Repulse");
 
 	// -------------------------
 	// Data
@@ -49,6 +53,7 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Updated, "Event.Ability.Updated");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Dash_Avtivated, "Event.Ability.Dash.Activated");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_Repulse_Avtivated, "Event.Ability.Repulse.Activated");
 	
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Impact, "Event.Ability.ShadowStrike.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Ability_ShadowStrike_Activated, "Event.Ability.ShadowStrike.Activated");
@@ -72,6 +77,8 @@ namespace NexusGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Heal_Burst, "GameplayCue.Heal.Burst");
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_Dash_Activate, "GameplayCue.Ability.Dash.Activate");
+	
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_Repulse_Activate, "GameplayCue.Ability.Repulse.Activate");
 	
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ability_ShadowStrike_Activate, "GameplayCue.Ability.ShadowStrike.Activate");
 	

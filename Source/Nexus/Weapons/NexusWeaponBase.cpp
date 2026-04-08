@@ -25,16 +25,57 @@ ANexusWeaponBase::ANexusWeaponBase()
 
 void ANexusWeaponBase::SetOwnerCharacter(ANexusCharacterBase* InOwnerCharacter)
 {
+	if (OwnerCharacter)
+	{
+		OwnerCharacter->OnDeathStateChanged.RemoveDynamic(this, &ThisClass::HandleOwnerDeathStateChanged);
+	}
+
 	OwnerCharacter = InOwnerCharacter;
 
 	if (InOwnerCharacter)
 	{
 		SetOwner(InOwnerCharacter);
 		SetInstigator(Cast<APawn>(InOwnerCharacter));
+		SetLifeSpan(0.0f);
+		InOwnerCharacter->OnDeathStateChanged.RemoveDynamic(this, &ThisClass::HandleOwnerDeathStateChanged);
+		InOwnerCharacter->OnDeathStateChanged.AddDynamic(this, &ThisClass::HandleOwnerDeathStateChanged);
+
+		if (InOwnerCharacter->GetIsDead())
+		{
+			HandleOwnerDeathStateChanged();
+		}
+	}
+	else
+	{
+		SetOwner(nullptr);
+		SetInstigator(nullptr);
 	}
 }
 
 bool ANexusWeaponBase::HasOffHandWeapon() const
 {
 	return OffHandWeaponMesh && OffHandWeaponMesh->GetStaticMesh() != nullptr;
+}
+
+void ANexusWeaponBase::Destroyed()
+{
+	if (OwnerCharacter)
+	{
+		OwnerCharacter->OnDeathStateChanged.RemoveDynamic(this, &ThisClass::HandleOwnerDeathStateChanged);
+	}
+
+	Super::Destroyed();
+}
+
+void ANexusWeaponBase::HandleOwnerDeathStateChanged()
+{
+	if (!HasAuthority() || !OwnerCharacter || !OwnerCharacter->GetIsDead())
+	{
+		return;
+	}
+
+	if (OwnerDeathLifeSpan > 0.0f)
+	{
+		SetLifeSpan(OwnerDeathLifeSpan);
+	}
 }

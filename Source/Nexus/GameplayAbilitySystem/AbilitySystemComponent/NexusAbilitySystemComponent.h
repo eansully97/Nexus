@@ -25,7 +25,7 @@ protected:
 	virtual void OnRep_ActivateAbilities() override;
 
 	bool CanProcessAbilityInput() const;
-	void BroadcastOwnerCombatStateChanged() const;
+	void BroadcastOwnerGrantedAbilitiesChanged() const;
 
 protected:
 	TArray<FGameplayAbilitySpec> LastActivatedAbilitySpecs;
